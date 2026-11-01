@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EDF0F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151C24" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Строфы">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Строфы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* Зимний вечер: синевато-серая бумага, газовый янтарь как единственный акцент */
+  :root {
+    --paper: #EDF0F3; --surface: #FFFFFF; --ink: #1E2833; --muted: #5C6976;
+    --rule: #D2D9E0; --gas: #A8661A; --on-gas: #FFFFFF; --error: #B3402F;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #151C24; --surface: #1D2631; --ink: #E5EBF0; --muted: #93A0AD;
+      --rule: #2D3A47; --gas: #E5AA52; --on-gas: #1B1206; --error: #E0705E;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink);
+    font: 16px/1.5 'PT Sans', 'Helvetica Neue', Arial, sans-serif; }
+  [hidden] { display: none !important; }
+  .serif { font-family: 'PT Serif', Georgia, serif; }
+
+  button { font: inherit; font-size: .9rem; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  button.primary { background: var(--gas); border-color: var(--gas); color: var(--on-gas); }
+  button.quiet { background: transparent; border-color: transparent; color: var(--muted); padding-left: 0; }
+  :focus-visible { outline: 2px solid var(--gas); outline-offset: 2px; }
+
+  /* экраны настройки и входа */
+  .screen { max-width: 34rem; margin: 0 auto;
+    padding: calc(56px + env(safe-area-inset-top, 0px)) 20px 40px; }
+  .screen h1 { font: 400 2.2rem/1.2 'PT Serif', Georgia, serif; margin: 0 0 16px; }
+  .screen p { margin: 0 0 14px; }
+  .screen .muted { color: var(--muted); font-size: .92rem; }
+  .screen input { width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; margin: 6px 0 10px; }
+  .stack { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-top: 20px; }
+
+  /* приложение */
+  header { position: sticky; top: 0; z-index: 5; background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #poem { flex: 1 1 14rem; min-width: 0; font: 1.3rem/1.3 'PT Serif', Georgia, serif;
+    color: var(--ink); background: transparent; border: none; padding: 4px 0; }
+  #sync { font-size: .82rem; color: var(--muted); flex-basis: 100%; }
+  @media (min-width: 700px) { #sync { flex-basis: auto; margin-left: 4px; } }
+
+  main { max-width: 1200px; margin: 0 auto;
+    padding: 4px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .stanza { display: grid; grid-template-columns: 1.6rem 1fr; column-gap: 10px;
+    padding: 20px 0; border-bottom: 1px solid var(--rule); }
+  .num { font-family: 'PT Serif', Georgia, serif; color: var(--gas); font-size: 1.15rem; padding-top: 22px; }
+  .fields { display: grid; gap: 12px; min-width: 0; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 2px; }
+  textarea { display: block; width: 100%; resize: none; overflow: hidden; font: inherit; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 8px 10px; min-height: 2.7em; }
+  textarea.verse { font: 1.08rem/1.65 'PT Serif', Georgia, serif;
+    background: transparent; border-color: transparent; padding-left: 0; }
+  textarea.verse:focus { background: var(--surface); border-color: var(--rule); padding-left: 10px; }
+  .actions { display: flex; justify-content: space-between; gap: 8px; }
+  .actions button { font-size: .85rem; padding: 4px 10px; }
+  .empty { color: var(--muted); padding: 32px 0 0; }
+  .foot { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .foot .muted { color: var(--muted); font-size: .85rem; flex-basis: 100%; }
+
+  @media (min-width: 900px) {
+    .fields { grid-template-columns: 1.1fr 1.2fr .9fr; align-items: start; }
+    .actions { grid-column: 1 / -1; }
+  }
+
+  #toast { position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 18px;
+    font-size: .9rem; max-width: calc(100% - 32px); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+  #toast.err { background: var(--error); color: #fff; }
+
+  dialog { width: min(640px, calc(100% - 24px)); border: 1px solid var(--rule); border-radius: 10px;
+    background: var(--paper); color: var(--ink); padding: 20px; }
+  dialog::backdrop { background: rgba(10, 15, 20, .5); }
+  dialog h2 { margin: 0 0 12px; font: 400 1.3rem 'PT Serif', Georgia, serif; }
+  dialog input { width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
+  dialog textarea { min-height: 14em; max-height: 50vh; overflow: auto; font-family: 'PT Serif', Georgia, serif; }
+  dialog .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 14px; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; }
+
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<section id="setup" class="screen" hidden>
+  <h1>Строфы</h1>
+  <p>Приложению нужен ключ Dropbox.</p>
+  <p class="muted">Откройте index.html и впишите App key из Dropbox App Console в строку <code>DROPBOX_APP_KEY</code> в начале скрипта.</p>
+</section>
+
+<section id="login" class="screen" hidden>
+  <h1>Строфы</h1>
+  <p>Стихи и заметки хранятся в вашем Dropbox, в папке приложения: по одному файлу Markdown на стихотворение.</p>
+  <p class="muted">Подключите Dropbox один раз на каждом устройстве.</p>
+  <div class="stack">
+    <button type="button" class="primary" id="loginBtn">Подключить Dropbox</button>
+    <button type="button" class="quiet" id="codeBtn">Вход не завершился? Войти по коду</button>
+  </div>
+  <div id="codeBox" hidden>
+    <p class="muted" style="margin-top:20px">В открывшейся вкладке разрешите доступ, скопируйте код и вставьте его сюда.</p>
+    <label for="codeInput">Код из Dropbox</label>
+    <input id="codeInput" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <button type="button" class="primary" id="codeSubmit">Подтвердить код</button>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header>
+    <select id="poem" aria-label="Стихотворение"></select>
+    <button type="button" id="copyAll">Скопировать всё для Claude</button>
+    <button type="button" id="newPoem">Новое</button>
+    <span id="sync" role="status" aria-live="polite"></span>
+  </header>
+  <main>
+    <div id="list"></div>
+    <div class="foot">
+      <button type="button" id="addStanza">Добавить строфу</button>
+      <button type="button" class="quiet" id="logout">Отключить Dropbox на этом устройстве</button>
+      <span class="muted">Файлы лежат в Dropbox: Приложения → папка вашего приложения.</span>
+    </div>
+  </main>
+</div>
+
+<div id="toast" role="alert"></div>
+
+<dialog id="newDialog">
+  <form method="dialog" id="newForm">
+    <h2>Новое стихотворение</h2>
+    <label for="newName">Название (станет именем файла)</label>
+    <input id="newName" required autocomplete="off">
+    <label for="newText">Текст</label>
+    <textarea id="newText"></textarea>
+    <p class="hint">Вставьте текст целиком, строфы разделены пустой строкой. Или скопируйте столбцы A–D из таблицы: номера, текст, понимание и выжимка разойдутся по местам.</p>
+    <div class="row">
+      <button type="button" id="cancelNew">Отмена</button>
+      <button type="submit" class="primary">Создать</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+/* ============ Настройка ============ */
+const DROPBOX_APP_KEY = 'yfsew12o5znpmqe';   // ← вставьте сюда App key из Dropbox App Console
+
+const TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
+const REDIRECT_URI = location.origin + location.pathname.replace(/index\.html$/, '');
+
+/* ============ Утилиты ============ */
+const $ = s => document.querySelector(s);
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); }
+    catch (e) { toast('Не удалось сохранить на устройстве: память браузера заполнена.', true); }
+  },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+class AuthError extends Error {
+  constructor() { super('Нужно заново подключить Dropbox.'); }
+}
+
+let toastTimer;
+function toast(msg, isError) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'show' + (isError ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, isError ? 7000 : 1800);
+}
+function setStatus(t) { $('#sync').textContent = t; }
+function show(id) { ['setup', 'login', 'app'].forEach(s => { $('#' + s).hidden = s !== id; }); }
+function grow(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+const trimBlank = s => s.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '').replace(/\s+$/, '');
+
+/* ============ Формат файла ============
+# Название
+
+## 1
+
+Текст строфы
+
+### Моё понимание
+
+...
+
+### Выжимка
+
+...
+*/
+const escLine = s => s.replace(/^(\\*#)/gm, '\\$1');
+const unescLine = s => s.replace(/^\\(\\*#)/, '$1');
+
+function serialize(m) {
+  const parts = ['# ' + m.title.replace(/\n/g, ' ')];
+  m.stanzas.forEach((s, i) => {
+    parts.push('## ' + (i + 1), escLine(s.text),
+      '### Моё понимание', escLine(s.und), '### Выжимка', escLine(s.sum));
+  });
+  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n') + '\n';
+}
+
+function parseMd(md, fallbackTitle) {
+  let title = fallbackTitle, cur = null, field = 'text';
+  const stanzas = [];
+  for (const line of md.replace(/\r/g, '').split('\n')) {
+    if (!cur && /^# /.test(line)) { title = line.slice(2).trim() || title; continue; }
+    if (/^## /.test(line)) { cur = { text: [], und: [], sum: [] }; stanzas.push(cur); field = 'text'; continue; }
+    if (cur && /^### /.test(line)) {
+      const h = line.slice(4).trim().toLowerCase();
+      if (/^мо[её]/.test(h)) field = 'und'; else if (/^выжим/.test(h)) field = 'sum';
+      continue;
+    }
+    if (cur) cur[field].push(unescLine(line));
+  }
+  return { title, stanzas: stanzas.map(s => ({
+    text: trimBlank(s.text.join('\n')), und: trimBlank(s.und.join('\n')), sum: trimBlank(s.sum.join('\n'))
+  })) };
+}
+
+/* Импорт: TSV из таблицы (с кавычками и переносами внутри ячеек) или текст с пустыми строками */
+function parseTSV(t) {
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) {
+      if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; }
+      else f += c;
+    } else if (c === '"' && f === '') q = true;
+    else if (c === '\t') { row.push(f); f = ''; }
+    else if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; }
+    else f += c;
+  }
+  row.push(f); rows.push(row);
+  return rows;
+}
+
+function parseImport(text) {
+  text = text.replace(/\r/g, '');
+  if (text.includes('\t')) {
+    const out = [];
+    for (const r of parseTSV(text)) {
+      const cols = r.map(trimBlank);
+      if (!cols.some(Boolean)) continue;
+      if (cols[0] === '№' || cols[1] === 'Текст') continue;
+      const c = /^\d+\.?$/.test(cols[0]) ? cols.slice(1) : cols;
+      if (!c.some(Boolean)) continue;
+      out.push({ text: c[0] || '', und: c[1] || '', sum: c[2] || '' });
+    }
+    return out;
+  }
+  return text.split(/\n[ \t]*\n/).map(trimBlank).filter(Boolean)
+    .map(p => ({ text: p, und: '', sum: '' }));
+}
+
+/* ============ Dropbox: вход (OAuth PKCE) ============ */
+function b64url(bytes) {
+  let s = ''; bytes.forEach(b => { s += String.fromCharCode(b); });
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function startLogin(withRedirect) {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  store.set('st.pkce', { v: verifier, redirect: withRedirect });
+  const q = new URLSearchParams({
+    client_id: DROPBOX_APP_KEY, response_type: 'code', token_access_type: 'offline',
+    code_challenge: b64url(new Uint8Array(digest)), code_challenge_method: 'S256'
+  });
+  if (withRedirect) q.set('redirect_uri', REDIRECT_URI);
+  const url = 'https://www.dropbox.com/oauth2/authorize?' + q;
+  if (withRedirect) location.href = url; else window.open(url, '_blank');
+}
+async function exchange(code) {
+  const p = store.get('st.pkce');
+  if (!p) throw new Error('Вход не завершён: начните подключение Dropbox заново.');
+  const body = new URLSearchParams({
+    code: code.trim(), grant_type: 'authorization_code', code_verifier: p.v, client_id: DROPBOX_APP_KEY
+  });
+  if (p.redirect) body.set('redirect_uri', REDIRECT_URI);
+  const r = await fetch(TOKEN_URL, { method: 'POST', body });
+  if (!r.ok) throw new Error('Dropbox не принял код. Начните подключение заново.');
+  const j = await r.json();
+  store.set('st.auth', { refresh: j.refresh_token, access: j.access_token, exp: Date.now() + (j.expires_in - 60) * 1000 });
+  store.del('st.pkce');
+}
+async function token() {
+  const a = store.get('st.auth');
+  if (!a) throw new AuthError();
+  if (a.access && Date.now() < a.exp) return a.access;
+  const r = await fetch(TOKEN_URL, { method: 'POST', body: new URLSearchParams({
+    grant_type: 'refresh_token', refresh_token: a.refresh, client_id: DROPBOX_APP_KEY }) });
+  if (r.status === 400 || r.status === 401) { store.del('st.auth'); throw new AuthError(); }
+  if (!r.ok) throw new Error('Dropbox временно недоступен (' + r.status + ').');
+  const j = await r.json();
+  a.access = j.access_token; a.exp = Date.now() + (j.expires_in - 60) * 1000;
+  store.set('st.auth', a);
+  return a.access;
+}
+
+/* ============ Dropbox: файлы ============ */
+// Заголовок Dropbox-API-Arg должен быть ASCII: кириллицу экранируем как \uXXXX
+const hdr = o => JSON.stringify(o).replace(/[\u007f-\uffff]/g,
+  c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+
+async function apiErr(r) {
+  if (r.status === 401) return new AuthError();
+  let s = '';
+  try { s = await r.text(); s = JSON.parse(s).error_summary || s; } catch (e) {}
+  const err = new Error('Dropbox: ' + (s || r.status));
+  err.conflict = r.status === 409 && /conflict/.test(s);
+  return err;
+}
+async function authed(call) {
+  let r = await call(await token());
+  if (r.status === 401) {
+    const a = store.get('st.auth'); if (a) { a.exp = 0; store.set('st.auth', a); }
+    r = await call(await token());
+  }
+  if (!r.ok) throw await apiErr(r);
+  return r;
+}
+async function rpc(endpoint, args) {
+  const r = await authed(t => fetch('https://api.dropboxapi.com/2/' + endpoint, {
+    method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+    body: JSON.stringify(args) }));
+  return r.json();
+}
+async function listRemote() {
+  let res = await rpc('files/list_folder', { path: '' });
+  let all = res.entries;
+  while (res.has_more) { res = await rpc('files/list_folder/continue', { cursor: res.cursor }); all = all.concat(res.entries); }
+  return all.filter(x => x['.tag'] === 'file' && /\.md$/i.test(x.name))
+    .map(x => ({ path: x.path_display, name: x.name, rev: x.rev }));
+}
+async function download(path) {
+  const r = await authed(t => fetch('https://content.dropboxapi.com/2/files/download', {
+    method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Dropbox-API-Arg': hdr({ path }) } }));
+  let rev = null;
+  try { rev = JSON.parse(r.headers.get('Dropbox-API-Result')).rev; } catch (e) {}
+  return { text: await r.text(), rev };
+}
+async function upload(path, text, rev, autorename) {
+  const arg = { path, mode: rev ? { '.tag': 'update', update: rev } : 'add', autorename: !!autorename, mute: true };
+  const r = await authed(t => fetch('https://content.dropboxapi.com/2/files/upload', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': hdr(arg) },
+    body: new Blob([text]) }));
+  return r.json();
+}
+
+/* ============ Локальный кэш и синхронизация ============ */
+// cache.poems[ключ] = { path, rev, remoteRev, md, dirty, ver }
+const cache = store.get('st.cache') || { poems: {} };
+const saveCache = () => store.set('st.cache', cache);
+const nameOf = e => e.path.split('/').pop().replace(/\.md$/i, '');
+let current = null, model = null, syncing = false;
+const timers = {}, pushing = {};
+
+function handleErr(e) {
+  if (e instanceof AuthError) { show('login'); toast(e.message, true); return; }
+  if (e instanceof TypeError) { setStatus('Нет связи — правки сохранятся позже'); return; }
+  toast(e.message, true);
+}
+
+async function sync() {
+  if (syncing) return;
+  syncing = true;
+  try {
+    if (!navigator.onLine) { setStatus('Нет связи — правки сохранятся позже'); return; }
+    setStatus('Синхронизирую…');
+    await pushAll();
+    const remote = await listRemote();
+    const seen = new Set();
+    for (const r of remote) {
+      const k = r.path.toLowerCase(); seen.add(k);
+      const e = cache.poems[k];
+      if (e) { e.remoteRev = r.rev; e.path = r.path; }
+      else cache.poems[k] = { path: r.path, rev: null, remoteRev: r.rev, md: null, dirty: false, ver: 0 };
+    }
+    for (const k of Object.keys(cache.poems)) if (!seen.has(k) && !cache.poems[k].dirty) delete cache.poems[k];
+    saveCache();
+    renderPicker();
+    if (!current || !cache.poems[current]) await openFirst();
+    else {
+      const e = cache.poems[current];
+      if (!e.dirty && e.rev !== e.remoteRev && !document.activeElement.matches('textarea')) await open(current);
+    }
+    if (!Object.values(cache.poems).some(e => e.dirty)) setStatus('Синхронизировано');
+  } catch (e) { handleErr(e); }
+  finally { syncing = false; }
+}
+
+function changed() {
+  const e = cache.poems[current];
+  e.md = serialize(model); e.dirty = true; e.ver = (e.ver || 0) + 1;
+  saveCache();
+  setStatus('Есть несохранённые правки');
+  schedulePush(current);
+}
+function schedulePush(k) {
+  clearTimeout(timers[k]);
+  timers[k] = setTimeout(() => push(k).catch(handleErr), 1500);
+}
+async function pushAll() {
+  for (const k of Object.keys(cache.poems)) {
+    clearTimeout(timers[k]);
+    if (cache.poems[k].dirty) await push(k);
+  }
+}
+async function push(k) {
+  const e = cache.poems[k];
+  if (!e || !e.dirty) return;
+  if (!navigator.onLine) { setStatus('Нет связи — правки сохранятся позже'); return; }
+  if (pushing[k]) { schedulePush(k); return; }
+  pushing[k] = true;
+  const ver = e.ver;
+  setStatus('Сохраняю…');
+  try {
+    const res = await upload(e.path, e.md, e.rev);
+    e.rev = e.remoteRev = res.rev;
+    if (e.ver === ver) e.dirty = false;
+    saveCache();
+    setStatus(e.dirty ? 'Есть несохранённые правки' : 'Сохранено');
+  } catch (err) {
+    if (err.conflict) await resolveConflict(k); else throw err;
+  } finally { pushing[k] = false; }
+}
+// Файл изменили на другом устройстве: свежую версию открываем, свою сохраняем отдельным файлом
+async function resolveConflict(k) {
+  const e = cache.poems[k];
+  const mine = e.md;
+  const copy = await upload(e.path.replace(/\.md$/i, '') + ' (моя версия).md', mine, null, true);
+  const ck = copy.path_display.toLowerCase();
+  cache.poems[ck] = { path: copy.path_display, rev: copy.rev, remoteRev: copy.rev, md: mine, dirty: false, ver: 0 };
+  const d = await download(e.path);
+  e.md = d.text; e.rev = e.remoteRev = d.rev || e.remoteRev; e.dirty = false;
+  saveCache();
+  renderPicker();
+  if (current === k) await open(k);
+  toast('«' + nameOf(e) + '» изменили на другом устройстве. Открыта свежая версия, ваши правки сохранены в «' + nameOf(cache.poems[ck]) + '».', true);
+}
+
+/* ============ Открытие и отрисовка ============ */
+function renderPicker() {
+  const sel = $('#poem');
+  const keys = Object.keys(cache.poems).sort((a, b) => nameOf(cache.poems[a]).localeCompare(nameOf(cache.poems[b]), 'ru'));
+  sel.innerHTML = '';
+  keys.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = nameOf(cache.poems[k]); sel.append(o); });
+  if (current && cache.poems[current]) sel.value = current;
+}
+async function openFirst() {
+  const last = store.get('st.current');
+  const keys = Object.keys(cache.poems);
+  if (last && cache.poems[last]) return open(last);
+  if (keys.length) return open($('#poem').options[0].value);
+  current = null; model = null;
+  renderEmpty('Стихов пока нет. Нажмите «Новое», чтобы вставить первое.');
+}
+async function open(k) {
+  const e = cache.poems[k];
+  if (!e) return;
+  current = k; store.set('st.current', k); $('#poem').value = k;
+  const needs = e.md == null || (!e.dirty && e.remoteRev && e.rev !== e.remoteRev);
+  if (needs && navigator.onLine && e.remoteRev) {
+    try {
+      setStatus('Загружаю…');
+      const d = await download(e.path);
+      e.md = d.text; e.rev = d.rev || e.remoteRev; saveCache();
+      setStatus('Синхронизировано');
+    } catch (err) { handleErr(err); }
+  }
+  if (e.md == null) { model = null; renderEmpty('Это стихотворение ещё не загружено на устройство. Подключитесь к интернету, чтобы открыть его.'); return; }
+  model = parseMd(e.md, nameOf(e));
+  render();
+}
+function renderEmpty(msg) {
+  const list = $('#list');
+  list.innerHTML = '';
+  const p = document.createElement('p'); p.className = 'empty'; p.textContent = msg;
+  list.append(p);
+  $('#addStanza').hidden = !model;
+}
+
+const FIELDS = [['text', 'Текст', 'verse'], ['und', 'Моё понимание', ''], ['sum', 'Выжимка', '']];
+function render() {
+  $('#addStanza').hidden = false;
+  if (!model.stanzas.length) { renderEmpty('Строф пока нет. Добавьте первую кнопкой ниже.'); $('#addStanza').hidden = false; return; }
+  const list = $('#list');
+  list.innerHTML = '';
+  model.stanzas.forEach((s, i) => list.append(stanzaEl(s, i)));
+  list.querySelectorAll('textarea').forEach(grow);
+}
+function stanzaEl(s, i) {
+  const art = document.createElement('article'); art.className = 'stanza';
+  const num = document.createElement('div'); num.className = 'num'; num.textContent = i + 1;
+  const f = document.createElement('div'); f.className = 'fields';
+  FIELDS.forEach(([key, label, cls]) => {
+    const wrap = document.createElement('div');
+    const id = 'f' + i + key;
+    const l = document.createElement('label'); l.htmlFor = id; l.textContent = label;
+    const t = document.createElement('textarea'); t.id = id; t.rows = 1; t.value = s[key];
+    if (cls) t.className = cls;
+    t.addEventListener('input', () => { grow(t); s[key] = t.value; changed(); });
+    wrap.append(l, t); f.append(wrap);
+  });
+  const a = document.createElement('div'); a.className = 'actions';
+  const del = document.createElement('button'); del.type = 'button'; del.className = 'quiet'; del.textContent = 'Удалить строфу';
+  del.addEventListener('click', () => {
+    if (!confirm('Удалить строфу ' + (i + 1) + ' вместе с заметками?')) return;
+    model.stanzas.splice(i, 1); changed(); render();
+  });
+  const cp = document.createElement('button'); cp.type = 'button'; cp.textContent = 'Скопировать для Claude';
+  cp.addEventListener('click', () => copy('«' + model.title + '», строфа ' + (i + 1) + '\n\n' + s.text +
+    '\n\nМоё понимание:\n' + (s.und || '—') + '\n\nВыжимка:\n' + (s.sum || '—')));
+  a.append(del, cp); f.append(a);
+  art.append(num, f);
+  return art;
+}
+
+function copy(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => toast('Скопировано'), () => copyFallback(text));
+  } else copyFallback(text);
+}
+function copyFallback(text) {
+  const t = document.createElement('textarea');
+  t.value = text; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+  document.body.append(t); t.select(); t.setSelectionRange(0, text.length);
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+  t.remove();
+  toast(ok ? 'Скопировано' : 'Не удалось скопировать: браузер запретил доступ к буферу обмена.', !ok);
+}
+
+/* ============ Действия ============ */
+$('#loginBtn').addEventListener('click', () => startLogin(true));
+$('#codeBtn').addEventListener('click', () => { $('#codeBox').hidden = false; startLogin(false); });
+$('#codeSubmit').addEventListener('click', async () => {
+  try { await exchange($('#codeInput').value); show('app'); renderPicker(); await openFirst(); await sync(); }
+  catch (e) { toast(e.message, true); }
+});
+$('#logout').addEventListener('click', () => {
+  if (!confirm('Отключить Dropbox на этом устройстве? Файлы в Dropbox останутся.')) return;
+  store.del('st.auth'); show('login');
+});
+$('#poem').addEventListener('change', e => open(e.target.value));
+$('#copyAll').addEventListener('click', () => {
+  if (!model || !model.stanzas.length) { toast('Копировать нечего: строф пока нет.', true); return; }
+  copy(serialize(model));
+});
+$('#addStanza').addEventListener('click', () => {
+  if (!model) return;
+  model.stanzas.push({ text: '', und: '', sum: '' });
+  changed(); render();
+  const ta = document.getElementById('f' + (model.stanzas.length - 1) + 'text');
+  if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center' }); }
+});
+
+const dlg = $('#newDialog');
+$('#newPoem').addEventListener('click', () => { $('#newName').value = ''; $('#newText').value = ''; dlg.showModal(); });
+$('#cancelNew').addEventListener('click', () => dlg.close());
+$('#newForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const title = $('#newName').value.trim();
+  const fname = title.replace(/[\/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!fname) { toast('Укажите название.', true); return; }
+  const path = '/' + fname + '.md', k = path.toLowerCase();
+  if (cache.poems[k]) { toast('Стихотворение «' + fname + '» уже есть.', true); return; }
+  const m = { title, stanzas: parseImport($('#newText').value) };
+  cache.poems[k] = { path, rev: null, remoteRev: null, md: serialize(m), dirty: true, ver: 1 };
+  saveCache(); dlg.close(); renderPicker();
+  await open(k);
+  toast('Создано: строф — ' + m.stanzas.length);
+  push(k).catch(handleErr);
+});
+
+window.addEventListener('online', sync);
+window.addEventListener('offline', () => setStatus('Нет связи — правки сохранятся позже'));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') sync();
+  else pushAll().catch(() => {});
+});
+window.addEventListener('resize', () => document.querySelectorAll('#list textarea').forEach(grow));
+
+/* ============ Запуск ============ */
+(async function boot() {
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (!DROPBOX_APP_KEY) { show('setup'); return; }
+  const params = new URLSearchParams(location.search);
+  if (params.get('code') || params.get('error')) {
+    if (params.get('code')) { try { await exchange(params.get('code')); } catch (e) { toast(e.message, true); } }
+    else toast('Подключение Dropbox отменено.', true);
+    history.replaceState(null, '', REDIRECT_URI);
+  }
+  if (!store.get('st.auth')) { show('login'); return; }
+  show('app');
+  renderPicker();
+  await openFirst();
+  await sync();
+})();
+</script>
+</body>
+</html>
