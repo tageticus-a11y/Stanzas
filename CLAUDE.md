@@ -1,4 +1,4 @@
-# Строфы
+# Stanzas
 
 Personal PWA for stanza-by-stanza notes on poems. Used on a Windows PC (browser)
 and an iPhone (Safari → Add to Home Screen). Hosted on GitHub Pages; all data
@@ -26,7 +26,7 @@ lives in the owner's Dropbox. No server of our own, no build step.
   mark it dirty and upload after 1.5 s of inactivity; also on `online`,
   on `visibilitychange` (hidden → push, visible → sync).
 - **Conflicts:** uploads use `mode: update` with the last known rev. On a
-  conflict the local version is uploaded as "<name> (моя версия).md" with
+  conflict the local version is uploaded as "<name> (my version).md" with
   autorename, and the remote version is reloaded. Never silently overwrite.
 
 ## Poem file format (keep backward compatible — existing files must still parse)
@@ -37,25 +37,33 @@ lives in the owner's Dropbox. No server of our own, no build step.
 
 verse lines
 
-### Моё понимание
+### My understanding
 
 notes
 
-### Выжимка
+### Questions (hidden)
 
-summary
+optional column
 ```
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
-- Both `###` subheadings are always written, even when empty.
+- `### My understanding` is always written, even when empty. Optional columns
+  (`### Summary`, `### Questions`, `### Other interpretations`, see `EXTRAS`)
+  exist per stanza and are written only when present (even if empty);
+  a ` (hidden)` suffix marks a collapsed column.
+- Legacy files use Russian headings (`### Моё понимание`, `### Выжимка`) and
+  must keep parsing (`HEADINGS`). An empty legacy `Выжимка` is dropped on load
+  (old versions always wrote it); files are re-saved with English headings.
 - Import (`parseImport`) accepts TSV copied from Google Sheets (columns
-  №, Текст, Моё понимание, Выжимка; quoted cells with newlines) or plain text
+  №, text, my understanding, optional summary; Russian or English header row; quoted cells with newlines) or plain text
   with blank lines between stanzas.
 
 ## Conventions
 - Vanilla JS, no frameworks, no dependencies, no bundler. Keep it one HTML file.
-- UI text is Russian. Use typographic quotes «» in UI strings.
-- Layout: stacked cards on phones, three columns at ≥900px. Light and dark
+- UI text is English. Use typographic quotes and apostrophes (“ ” ’) in UI strings.
+  Poem content is often Russian, so keep Cyrillic-safe handling everywhere.
+- Layout: stacked cards on phones; at ≥900px two columns (text, understanding),
+  three when a stanza shows optional columns (stacked in the third). Light and dark
   themes via CSS variables and `prefers-color-scheme`. Respect iOS safe areas.
 - Build DOM with `textContent`/`value`, never `innerHTML` with user content.
 - Error messages say what happened and what to do next.

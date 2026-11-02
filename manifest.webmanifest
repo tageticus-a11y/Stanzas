@@ -1,6 +1,6 @@
 {
-  "name": "Строфы",
-  "short_name": "Строфы",
+  "name": "Stanzas",
+  "short_name": "Stanzas",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

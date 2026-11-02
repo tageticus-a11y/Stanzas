@@ -1,4 +1,4 @@
-# Строфы
+# Stanzas
 
 Personal notebook for reading poems stanza by stanza: the verse, my reading,
 and a summary. Works in the browser on PC and as a Home Screen app on iPhone.
@@ -21,7 +21,7 @@ Poems are stored as Markdown files in my Dropbox.
 4. **PC:** open the site and connect Dropbox.
 5. **iPhone:** open the site in Safari → Share → Add to Home Screen, open it
    from the icon and connect Dropbox there too (if sign-in doesn't return to
-   the app, use "Войти по коду").
+   the app, use "Sign in with a code").
 
 ## Updating
 

@@ -1,6 +1,6 @@
-// Кэш оболочки приложения, чтобы «Строфы» открывались без интернета.
-// При изменении файлов приложения увеличьте номер версии.
-const CACHE = 'stanzas-v2';
+// Caches the app shell so Stanzas opens without internet.
+// Bump the version whenever app files change.
+const CACHE = 'stanzas-v3';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -18,7 +18,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin === location.origin) {
-    // Сначала сеть (чтобы обновления приходили), без сети — из кэша
+    // Network first (so updates arrive); offline — from the cache
     e.respondWith(fetch(e.request).then(r => {
       if (r.ok) { const copy = r.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); }
       return r;
@@ -29,5 +29,5 @@ self.addEventListener('fetch', e => {
       return res;
     })));
   }
-  // Запросы к Dropbox не трогаем
+  // Dropbox requests are left alone
 });
