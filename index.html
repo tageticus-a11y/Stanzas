@@ -62,7 +62,11 @@
     padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   #poem { flex: 1 1 14rem; min-width: 0; font: 1.3rem/1.3 'PT Serif', Georgia, serif;
-    color: var(--ink); background: transparent; border: none; padding: 4px 0; }
+    color: var(--ink); background: var(--paper); border: 1px solid transparent; border-radius: 6px; padding: 4px 6px; }
+  #poem:hover { border-color: var(--rule); }
+  /* The open list is drawn by the browser: give it explicit colors and a normal size */
+  #poem optgroup { font: 700 .95rem/1.4 'PT Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--muted); background: var(--surface); }
+  #poem option { font: 400 1rem/1.4 'PT Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--ink); background: var(--surface); }
   #sync { font-size: .82rem; color: var(--muted); flex-basis: 100%; }
   @media (min-width: 700px) { #sync { flex-basis: auto; margin-left: 4px; } }
 
