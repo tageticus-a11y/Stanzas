@@ -89,6 +89,10 @@ optional, after the last stanza
   three when a stanza shows optional columns (stacked in the third). Light and dark
   themes via CSS variables and `prefers-color-scheme`. Respect iOS safe areas.
 - Build DOM with `textContent`/`value`, never `innerHTML` with user content.
+- The poem picker is a native `<select id="poem">` (source of truth; tests use
+  `selectOption`). On fine-pointer devices a click opens our own `#poemList`
+  instead, because Edge draws the native list cramped or cut off on some
+  setups. Touch devices (iPhone) keep the native picker.
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.
