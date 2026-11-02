@@ -21,12 +21,16 @@
   :root {
     --paper: #EDF0F3; --surface: #FFFFFF; --ink: #1E2833; --muted: #5C6976;
     --rule: #D2D9E0; --gas: #A8661A; --on-gas: #FFFFFF; --error: #B3402F;
+    --hl-yellow: rgba(255, 210, 0, .45); --hl-green: rgba(60, 190, 100, .32); --hl-blue: rgba(60, 140, 255, .28);
+    --hl-pink: rgba(255, 80, 140, .28); --hl-violet: rgba(140, 90, 255, .28);
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --paper: #151C24; --surface: #1D2631; --ink: #E5EBF0; --muted: #93A0AD;
       --rule: #2D3A47; --gas: #E5AA52; --on-gas: #1B1206; --error: #E0705E;
+      --hl-yellow: rgba(230, 190, 40, .38); --hl-green: rgba(70, 190, 110, .36); --hl-blue: rgba(80, 150, 255, .4);
+      --hl-pink: rgba(255, 90, 150, .36); --hl-violet: rgba(160, 110, 255, .42);
       color-scheme: dark;
     }
   }
@@ -70,7 +74,7 @@
   .fields { display: grid; gap: 12px; min-width: 0; }
   .extra { display: grid; gap: 12px; min-width: 0; }
   label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 2px; }
-  .fhead { display: flex; align-items: baseline; gap: 2px; margin-bottom: 2px; }
+  .fhead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; min-height: 24px; margin-bottom: 2px; }
   .fhead label { flex: 1; margin: 0; }
   .fhead button { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 6px; }
   textarea { display: block; width: 100%; resize: none; overflow: hidden; font: inherit; color: var(--ink);
@@ -78,7 +82,31 @@
     padding: 8px 10px; min-height: 2.7em; }
   textarea.verse { font: 1.08rem/1.65 'PT Serif', Georgia, serif;
     background: transparent; border-color: transparent; padding-left: 0; }
-  textarea.verse:focus { background: var(--surface); border-color: var(--rule); padding-left: 10px; }
+  textarea.verse:focus { border-color: var(--rule); padding-left: 10px; }
+
+  /* Highlights: a backdrop with the same text and <mark>s sits behind a transparent textarea */
+  .hl { position: relative; border-radius: 6px; background: var(--surface); }
+  .hl.verse { background: transparent; }
+  .hl.verse:focus-within { background: var(--surface); }
+  .hl textarea { position: relative; background: transparent; }
+  .backdrop { position: absolute; inset: 0; border: 1px solid transparent; padding: 8px 10px; color: transparent;
+    white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; pointer-events: none; }
+  .hl.verse .backdrop { font: 1.08rem/1.65 'PT Serif', Georgia, serif; padding-left: 0; }
+  .hl.verse:focus-within .backdrop { padding-left: 10px; }
+  /* iOS Safari adds 3px of unremovable horizontal padding inside textareas */
+  .ios .backdrop { padding-left: 13px; padding-right: 13px; }
+  .ios .hl.verse .backdrop { padding-left: 3px; }
+  .ios .hl.verse:focus-within .backdrop { padding-left: 13px; }
+  .backdrop mark { color: transparent; border-radius: 3px; }
+  .hl-yellow { background: var(--hl-yellow); } .hl-green { background: var(--hl-green); }
+  .hl-blue { background: var(--hl-blue); } .hl-pink { background: var(--hl-pink); }
+  .hl-violet { background: var(--hl-violet); }
+  #palette { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px; }
+  #palette .sw { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--rule); background: var(--c); }
+  #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
+
+  #final { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
+  #final:empty { display: none; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .actions button, .actions select { font-size: .85rem; padding: 4px 10px; }
   .actions select { font-family: inherit; color: var(--ink); background: var(--surface);
@@ -147,8 +175,10 @@
   </header>
   <main>
     <div id="list"></div>
+    <div id="final"></div>
     <div class="foot">
       <button type="button" id="addStanza">Add stanza</button>
+      <button type="button" id="addFinal">Add conclusion</button>
       <button type="button" class="quiet" id="logout">Disconnect Dropbox on this device</button>
       <span class="muted">Files are in Dropbox: Apps → your app’s folder.</span>
     </div>
@@ -156,6 +186,15 @@
 </div>
 
 <div id="toast" role="alert"></div>
+
+<div id="palette" hidden>
+  <button type="button" class="sw" data-c="yellow" style="--c: var(--hl-yellow)" aria-label="Highlight yellow" title="Yellow"></button>
+  <button type="button" class="sw" data-c="green" style="--c: var(--hl-green)" aria-label="Highlight green" title="Green"></button>
+  <button type="button" class="sw" data-c="blue" style="--c: var(--hl-blue)" aria-label="Highlight blue" title="Blue"></button>
+  <button type="button" class="sw" data-c="pink" style="--c: var(--hl-pink)" aria-label="Highlight pink" title="Pink"></button>
+  <button type="button" class="sw" data-c="violet" style="--c: var(--hl-violet)" aria-label="Highlight violet" title="Violet"></button>
+  <button type="button" class="clear" data-c="">Clear</button>
+</div>
 
 <dialog id="newDialog">
   <form method="dialog" id="newForm">
@@ -181,6 +220,8 @@ const REDIRECT_URI = location.origin + location.pathname.replace(/index\.html$/,
 
 /* ============ Utilities ============ */
 const $ = s => document.querySelector(s);
+if (/iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+  document.documentElement.classList.add('ios');
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
   set(k, v) {
@@ -222,41 +263,92 @@ Stanza text
 
 ...
 
+## Conclusion
+
+...
+
 "My understanding" is always written. Optional columns (Summary, Questions,
 Other interpretations) are written only for stanzas that have them;
-" (hidden)" marks a collapsed one. Older files use Russian headings
-(«Моё понимание», «Выжимка») and still parse.
+" (hidden)" marks a collapsed one. The optional "## Conclusion" comes after
+the last stanza. Older files use Russian headings («Моё понимание»,
+«Выжимка») and still parse.
+
+Highlights are stored inline: <mark class="yellow">…</mark>. A literal "<mark"
+or "</mark" typed by the user gets its preceding backslashes doubled plus one;
+backslashes right before a real tag are doubled (encodeMarks/decodeMarks).
 */
 const EXTRAS = [['sum', 'Summary'], ['q', 'Questions'], ['oth', 'Other interpretations']];
 const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^(summary|выжим)/, 'sum'], [/^question/, 'q'], [/^other/, 'oth']];
+const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 
 const escLine = s => s.replace(/^(\\*#)/gm, '\\$1');
 const unescLine = s => s.replace(/^\\(\\*#)/, '$1');
 
+// ranges: sorted, non-overlapping [start, end, color] over the plain text
+function encodeMarks(text, ranges) {
+  const seg = (s, beforeTag) => {
+    s = s.replace(/(\\*)(<\/?mark)/g, (_, b, t) => b + b + '\\' + t);
+    return beforeTag ? s.replace(/\\+$/, b => b + b) : s;
+  };
+  let out = '', pos = 0;
+  for (const [a, b, c] of ranges || []) {
+    out += seg(text.slice(pos, a), true) + '<mark class="' + c + '">' + seg(text.slice(a, b), true) + '</mark>';
+    pos = b;
+  }
+  return out + seg(text.slice(pos), false);
+}
+function decodeMarks(raw) {
+  const re = /(\\*)(<\/?mark)/g, ranges = [];
+  let text = '', last = 0, open = null, m;
+  while ((m = re.exec(raw))) {
+    const k = m[1].length;
+    text += raw.slice(last, m.index) + '\\'.repeat(k >> 1);
+    const rest = raw.slice(m.index + k);
+    const tag = k % 2 ? null : (/^<mark class="([a-z]+)">/.exec(rest) || /^<\/mark>/.exec(rest));
+    if (tag && tag[1] && COLORS.includes(tag[1]) && !open) open = { a: text.length, c: tag[1] };
+    else if (tag && !tag[1] && open) { if (text.length > open.a) ranges.push([open.a, text.length, open.c]); open = null; }
+    else { text += m[2]; last = re.lastIndex; continue; }
+    last = re.lastIndex = m.index + k + tag[0].length;
+  }
+  text += raw.slice(last);
+  if (open && text.length > open.a) ranges.push([open.a, text.length, open.c]);
+  return { text, ranges };
+}
+
 function newStanza(text, und, sum) {
-  const s = { text: text || '', und: und || '', hidden: [] };
+  const s = { text: text || '', und: und || '', hidden: [], marks: {} };
   if (sum) s.sum = sum;
   return s;
 }
 
 function serialize(m) {
   const parts = ['# ' + m.title.replace(/\n/g, ' ')];
+  const field = (o, k) => escLine(encodeMarks(o[k], o.marks[k]));
   m.stanzas.forEach((s, i) => {
-    parts.push('## ' + (i + 1), escLine(s.text), '### My understanding', escLine(s.und));
+    parts.push('## ' + (i + 1), field(s, 'text'), '### My understanding', field(s, 'und'));
     EXTRAS.forEach(([k, label]) => {
-      if (s[k] != null) parts.push('### ' + label + (s.hidden.includes(k) ? ' (hidden)' : ''), escLine(s[k]));
+      if (s[k] != null) parts.push('### ' + label + (s.hidden.includes(k) ? ' (hidden)' : ''), field(s, k));
     });
   });
+  if (m.final != null) parts.push('## Conclusion', field(m, 'final'));
   return parts.join('\n\n').replace(/\n{3,}/g, '\n\n') + '\n';
 }
 
+function setField(o, k, lines) {
+  const d = decodeMarks(trimBlank(lines.join('\n')));
+  o[k] = d.text;
+  if (d.ranges.length) o.marks[k] = d.ranges;
+}
 function parseMd(md, fallbackTitle) {
-  let title = fallbackTitle, cur = null, field = 'text';
+  let title = fallbackTitle, cur = null, field = 'text', fin = null;
   const stanzas = [];
   for (const line of md.replace(/\r/g, '').split('\n')) {
     if (!cur && /^# /.test(line)) { title = line.slice(2).trim() || title; continue; }
-    if (/^## /.test(line)) { cur = { text: [], und: [], hidden: [] }; stanzas.push(cur); field = 'text'; continue; }
-    if (cur && /^### /.test(line)) {
+    if (/^## /.test(line)) {
+      if (/^## conclusion\s*$/i.test(line)) { cur = fin = { final: [] }; field = 'final'; continue; }
+      cur = { text: [], und: [], hidden: [] }; stanzas.push(cur); field = 'text'; continue;
+    }
+    if (cur && cur !== fin && /^### /.test(line)) {
       let h = line.slice(4).trim().toLowerCase();
       const hidden = /\(hidden\)$/.test(h);
       h = h.replace(/\s*\(hidden\)$/, '');
@@ -271,14 +363,16 @@ function parseMd(md, fallbackTitle) {
     }
     if (cur) cur[field].push(unescLine(line));
   }
-  return { title, stanzas: stanzas.map(s => {
-    const out = newStanza(trimBlank(s.text.join('\n')), trimBlank(s.und.join('\n')));
-    EXTRAS.forEach(([k]) => { if (s[k]) out[k] = trimBlank(s[k].join('\n')); });
+  const m = { title, marks: {}, stanzas: stanzas.map(s => {
+    const out = newStanza();
+    ['text', 'und', ...EXTRAS.map(([k]) => k)].forEach(k => { if (s[k]) setField(out, k, s[k]); });
     // Old files always wrote an empty «Выжимка»: don't turn it into an empty Summary column
     if (s.legacySum && !out.sum) delete out.sum;
     out.hidden = s.hidden.filter(k => out[k] != null);
     return out;
   }) };
+  if (fin) setField(m, 'final', fin.final);
+  return m;
 }
 
 /* Import: TSV from a spreadsheet (quoted cells may contain newlines) or text with blank lines */
@@ -535,24 +629,36 @@ async function open(k) {
   model = parseMd(e.md, nameOf(e));
   render();
 }
-function renderEmpty(msg) {
-  const list = $('#list');
-  list.innerHTML = '';
+function emptyEl(msg) {
   const p = document.createElement('p'); p.className = 'empty'; p.textContent = msg;
-  list.append(p);
-  $('#addStanza').hidden = !model;
+  return p;
+}
+// No poem open
+function renderEmpty(msg) {
+  document.body.append(palette); palette.hidden = true;
+  $('#list').innerHTML = ''; $('#list').append(emptyEl(msg));
+  $('#final').innerHTML = '';
+  $('#addStanza').hidden = $('#addFinal').hidden = true;
 }
 
 function render() {
-  $('#addStanza').hidden = false;
-  if (!model.stanzas.length) { renderEmpty('No stanzas yet. Add the first one below.'); $('#addStanza').hidden = false; return; }
+  document.body.append(palette); palette.hidden = true;   // keep the palette out of the DOM being rebuilt
   const list = $('#list');
   list.innerHTML = '';
-  model.stanzas.forEach((s, i) => list.append(stanzaEl(s, i)));
-  list.querySelectorAll('textarea').forEach(grow);
+  if (model.stanzas.length) model.stanzas.forEach((s, i) => list.append(stanzaEl(s, i)));
+  else list.append(emptyEl('No stanzas yet. Add the first one below.'));
+  const fin = $('#final');
+  fin.innerHTML = '';
+  if (model.final != null) fin.append(fieldEl(model, 'final', 'ffinal', 'Conclusion', '', [button('Remove', '', () => {
+    if (model.final && !confirm('Remove the conclusion? Its text will be deleted.')) return;
+    delete model.final; delete model.marks.final; changed(); render();
+  })]));
+  $('#addStanza').hidden = false;
+  $('#addFinal').hidden = model.final != null;
+  document.querySelectorAll('main textarea').forEach(grow);
 }
-function focusField(i, key) {
-  const t = document.getElementById('f' + i + key);
+function focusField(id) {
+  const t = document.getElementById(id);
   if (t) { t.focus(); t.scrollIntoView({ block: 'center' }); }
 }
 function button(text, cls, onClick) {
@@ -561,37 +667,43 @@ function button(text, cls, onClick) {
   b.addEventListener('click', onClick);
   return b;
 }
-function fieldEl(s, i, key, label, cls, tools) {
-  const wrap = document.createElement('div');
-  const id = 'f' + i + key;
+// A text field of obj[key] with its highlights (obj.marks[key]) drawn on a backdrop
+function fieldEl(obj, key, id, label, cls, tools) {
+  const wrap = document.createElement('div'); wrap.className = 'field';
+  const head = document.createElement('div'); head.className = 'fhead';
   const l = document.createElement('label'); l.htmlFor = id; l.textContent = label;
-  if (tools) {
-    const head = document.createElement('div'); head.className = 'fhead';
-    head.append(l,
-      button('Hide', '', () => { s.hidden.push(key); changed(); render(); }),
-      button('Remove', '', () => {
-        if (s[key] && !confirm('Remove “' + label + '” from stanza ' + (i + 1) + '? Its text will be deleted.')) return;
-        delete s[key]; s.hidden = s.hidden.filter(k => k !== key); changed(); render();
-      }));
-    wrap.append(head);
-  } else wrap.append(l);
-  const t = document.createElement('textarea'); t.id = id; t.rows = 1; t.value = s[key];
+  head.append(l, ...(tools || []));
+  const box = document.createElement('div'); box.className = 'hl' + (cls ? ' ' + cls : '');
+  const bd = document.createElement('div'); bd.className = 'backdrop'; bd.setAttribute('aria-hidden', 'true');
+  const t = document.createElement('textarea'); t.id = id; t.rows = 1; t.value = obj[key];
   if (cls) t.className = cls;
-  t.addEventListener('input', () => { grow(t); s[key] = t.value; changed(); });
-  wrap.append(t);
+  t._f = { obj, key, bd }; t._prev = t.value;
+  paintBackdrop(t);
+  t.addEventListener('input', () => {
+    if (obj.marks[key]) obj.marks[key] = shiftMarks(obj.marks[key], t._prev, t.value);
+    obj[key] = t._prev = t.value;
+    paintBackdrop(t); grow(t); changed();
+  });
+  box.append(bd, t); wrap.append(head, box);
   return wrap;
 }
 function stanzaEl(s, i) {
   const art = document.createElement('article'); art.className = 'stanza';
   const num = document.createElement('div'); num.className = 'num'; num.textContent = i + 1;
   const f = document.createElement('div'); f.className = 'fields';
-  f.append(fieldEl(s, i, 'text', 'Text', 'verse'), fieldEl(s, i, 'und', 'My understanding', ''));
+  f.append(fieldEl(s, 'text', 'f' + i + 'text', 'Text', 'verse'), fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', ''));
 
   const shown = EXTRAS.filter(([k]) => s[k] != null && !s.hidden.includes(k));
   if (shown.length) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
-    shown.forEach(([k, label]) => ex.append(fieldEl(s, i, k, label, '', true)));
+    shown.forEach(([k, label]) => ex.append(fieldEl(s, k, 'f' + i + k, label, '', [
+      button('Hide', '', () => { s.hidden.push(k); changed(); render(); }),
+      button('Remove', '', () => {
+        if (s[k] && !confirm('Remove “' + label + '” from stanza ' + (i + 1) + '? Its text will be deleted.')) return;
+        delete s[k]; delete s.marks[k]; s.hidden = s.hidden.filter(x => x !== k); changed(); render();
+      })
+    ])));
     f.append(ex);
   }
 
@@ -602,7 +714,7 @@ function stanzaEl(s, i) {
   }));
   EXTRAS.filter(([k]) => s[k] != null && s.hidden.includes(k)).forEach(([k, label]) => {
     a.append(button('Show ' + label.toLowerCase(), '', () => {
-      s.hidden = s.hidden.filter(x => x !== k); changed(); render(); focusField(i, k);
+      s.hidden = s.hidden.filter(x => x !== k); changed(); render(); focusField('f' + i + k);
     }));
   });
   const missing = EXTRAS.filter(([k]) => s[k] == null);
@@ -614,19 +726,95 @@ function stanzaEl(s, i) {
     });
     add.addEventListener('change', () => {
       if (!add.value) return;
-      s[add.value] = ''; changed(); render(); focusField(i, add.value);
+      s[add.value] = ''; changed(); render(); focusField('f' + i + add.value);
     });
     a.append(add);
   }
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
-    let t = '“' + model.title + '”, stanza ' + (i + 1) + '\n\n' + s.text + '\n\nMy understanding:\n' + (s.und || '—');
-    EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + s[k]; });
+    const val = k => encodeMarks(s[k], s.marks[k]);
+    let t = '“' + model.title + '”, stanza ' + (i + 1) + '\n\n' + val('text') + '\n\nMy understanding:\n' + (s.und ? val('und') : '—');
+    EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + val(k); });
     copy(t);
   }));
   f.append(a);
   art.append(num, f);
   return art;
+}
+
+/* ============ Highlighting ============ */
+function paintBackdrop(t) {
+  const { obj, key, bd } = t._f, text = obj[key];
+  bd.textContent = '';
+  let pos = 0;
+  for (const [a, b, c] of obj.marks[key] || []) {
+    const m = document.createElement('mark'); m.className = 'hl-' + c; m.textContent = text.slice(a, b);
+    bd.append(text.slice(pos, a), m);
+    pos = b;
+  }
+  bd.append(text.slice(pos));
+}
+// Keep highlights on the same words after an edit: typing inside a highlight extends it, at its edges doesn't
+function shiftMarks(ranges, old, now) {
+  const max = Math.min(old.length, now.length);
+  let p = 0, sfx = 0;
+  while (p < max && old[p] === now[p]) p++;
+  while (sfx < max - p && old[old.length - 1 - sfx] === now[now.length - 1 - sfx]) sfx++;
+  const oldEnd = old.length - sfx, newEnd = now.length - sfx, d = now.length - old.length;
+  return ranges.map(([s, e, c]) => [s < p ? s : s >= oldEnd ? s + d : newEnd, e <= p ? e : e > oldEnd ? e + d : p, c])
+    .filter(r => r[0] < r[1]);
+}
+// Color [a, b) with c, or clear it when c is null
+function paint(ranges, a, b, c) {
+  const out = [];
+  for (const r of ranges) {
+    if (r[1] <= a || r[0] >= b) out.push(r);
+    else {
+      if (r[0] < a) out.push([r[0], a, r[2]]);
+      if (r[1] > b) out.push([b, r[1], r[2]]);
+    }
+  }
+  if (c) out.push([a, b, c]);
+  out.sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const r of out) {
+    const last = merged[merged.length - 1];
+    if (last && last[1] === r[0] && last[2] === r[2]) last[1] = r[1]; else merged.push([...r]);
+  }
+  return merged;
+}
+
+const palette = $('#palette');
+let sel = null, hideTimer;
+const isField = el => !!el && !!el.matches && el.matches('main textarea');
+// Remember the selection: on iPhone, tapping the palette may blur the field first
+function track() { const t = document.activeElement; if (isField(t)) sel = { t, a: t.selectionStart, b: t.selectionEnd }; }
+['selectionchange', 'select', 'keyup', 'mouseup', 'touchend'].forEach(ev => document.addEventListener(ev, track, true));
+document.addEventListener('focusin', e => {
+  if (!isField(e.target)) return;
+  clearTimeout(hideTimer);
+  e.target.closest('.field').querySelector('label').after(palette);
+  palette.hidden = false;
+  track();
+});
+document.addEventListener('focusout', e => {
+  if (!isField(e.target)) return;
+  hideTimer = setTimeout(() => { if (!isField(document.activeElement)) palette.hidden = true; }, 400);
+});
+palette.addEventListener('mousedown', e => e.preventDefault());
+palette.addEventListener('click', e => { const b = e.target.closest('button'); if (b) highlight(b.dataset.c || null); });
+function highlight(c) {
+  if (!sel || !sel.t.isConnected) return;
+  const { t } = sel, { obj, key } = t._f, ranges = obj.marks[key] || [];
+  let { a, b } = sel;
+  if (a === b) {   // just a cursor: recolor or clear the highlight it's in
+    const r = ranges.find(r => r[0] <= a && a <= r[1]);
+    if (!r) { toast('Select some text first, then pick a color.'); return; }
+    [a, b] = r;
+  }
+  obj.marks[key] = paint(ranges, a, b, c);
+  paintBackdrop(t); changed();
+  t.focus({ preventScroll: true }); t.setSelectionRange(b, b);
 }
 
 function copy(text) {
@@ -663,7 +851,13 @@ $('#addStanza').addEventListener('click', () => {
   if (!model) return;
   model.stanzas.push(newStanza());
   changed(); render();
-  focusField(model.stanzas.length - 1, 'text');
+  focusField('f' + (model.stanzas.length - 1) + 'text');
+});
+$('#addFinal').addEventListener('click', () => {
+  if (!model) return;
+  model.final = '';
+  changed(); render();
+  focusField('ffinal');
 });
 
 const dlg = $('#newDialog');
@@ -676,7 +870,7 @@ $('#newForm').addEventListener('submit', async ev => {
   if (!fname) { toast('Enter a title.', true); return; }
   const path = '/' + fname + '.md', k = path.toLowerCase();
   if (cache.poems[k]) { toast('A poem called “' + fname + '” already exists.', true); return; }
-  const m = { title, stanzas: parseImport($('#newText').value) };
+  const m = { title, stanzas: parseImport($('#newText').value), marks: {} };
   cache.poems[k] = { path, rev: null, remoteRev: null, md: serialize(m), dirty: true, ver: 1 };
   saveCache(); dlg.close(); renderPicker();
   await open(k);
@@ -690,7 +884,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') sync();
   else pushAll().catch(() => {});
 });
-window.addEventListener('resize', () => document.querySelectorAll('#list textarea').forEach(grow));
+window.addEventListener('resize', () => document.querySelectorAll('main textarea').forEach(grow));
 
 /* ============ Start ============ */
 (async function boot() {

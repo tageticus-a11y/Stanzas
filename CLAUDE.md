@@ -43,7 +43,11 @@ notes
 
 ### Questions (hidden)
 
-optional column
+optional column with a <mark class="yellow">highlight</mark>
+
+## Conclusion
+
+optional, after the last stanza
 ```
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
@@ -51,6 +55,14 @@ optional column
   (`### Summary`, `### Questions`, `### Other interpretations`, see `EXTRAS`)
   exist per stanza and are written only when present (even if empty);
   a ` (hidden)` suffix marks a collapsed column.
+- `## Conclusion` (optional, poem-level) comes after the last stanza; any other
+  `## ` heading starts a stanza.
+- Highlights are stored inline as `<mark class="COLOR">…</mark>`, COLOR one of
+  `COLORS` (yellow, green, blue, pink, violet); in memory they are ranges
+  `obj.marks[field] = [[start, end, color]]` over the plain text. Backslashes
+  before a literal `<mark`/`</mark>` are escaped (`encodeMarks`/`decodeMarks`).
+  In the UI each field is a transparent textarea over a `.backdrop` that draws
+  the marks; keep their font, padding and border identical.
 - Legacy files use Russian headings (`### Моё понимание`, `### Выжимка`) and
   must keep parsing (`HEADINGS`). An empty legacy `Выжимка` is dropped on load
   (old versions always wrote it); files are re-saved with English headings.

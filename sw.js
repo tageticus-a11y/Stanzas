@@ -1,6 +1,6 @@
 // Caches the app shell so Stanzas opens without internet.
 // Bump the version whenever app files change.
-const CACHE = 'stanzas-v3';
+const CACHE = 'stanzas-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
