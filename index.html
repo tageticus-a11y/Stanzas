@@ -66,14 +66,18 @@
   #poem:hover { border-color: var(--rule); }
   /* Our own poem list for mouse-driven browsers (see openPoemList) */
   #poemList { position: fixed; z-index: 20; width: min(32rem, calc(100vw - 32px)); max-height: min(70vh, 34rem); overflow-y: auto;
-    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 0;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 0 0 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
-  #poemList:focus { outline: none; }
-  #poemList .group { font-size: .8rem; font-weight: 700; color: var(--muted); padding: 10px 14px 4px; }
-  #poemList .item { padding: 6px 14px; cursor: pointer; font-family: 'PT Serif', Georgia, serif; }
-  #poemList .item.nested { padding-left: 28px; }
-  #poemList .item.active { background: var(--paper); }
+  #plSearch { display: block; width: calc(100% - 16px); margin: 8px; font: inherit; font-size: .95rem; color: var(--ink);
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; }
+  #poemList .item, #poemList .folder { padding: 6px 14px; cursor: pointer; }
+  #poemList .item { font-family: 'PT Serif', Georgia, serif; }
+  #poemList .folder { display: flex; gap: 8px; font-size: .9rem; font-weight: 700; color: var(--muted); }
+  #poemList .count { margin-left: auto; font-weight: 400; font-size: .8rem; }
+  #poemList .path { margin-left: 8px; font: .8rem 'PT Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--muted); }
+  #poemList .active { background: var(--paper); }
   #poemList .item[aria-selected="true"] { color: var(--gas); font-weight: 700; }
+  #poemList .none { padding: 6px 14px; color: var(--muted); }
   /* The open list is drawn by the browser: give it explicit colors and a normal size */
   #poem optgroup { font: 700 .95rem/1.4 'PT Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--muted); background: var(--surface); }
   #poem option { font: 400 1rem/1.4 'PT Sans', 'Helvetica Neue', Arial, sans-serif; color: var(--ink); background: var(--surface); }
@@ -116,11 +120,20 @@
   .hl-blue { background: var(--hl-blue); } .hl-pink { background: var(--hl-pink); }
   .hl-violet { background: var(--hl-violet); }
   #palette { display: inline-flex; align-items: center; gap: 6px; margin: 0 4px; }
+  /* touch: next to a field, on its own row under the label and buttons */
+  .fhead #palette { order: 1; flex-basis: 100%; margin: 4px 0; }
   #palette .sw { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--rule); background: var(--c); }
   #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
 
-  #final { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
-  #final:empty { display: none; }
+  #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
+  #final:empty, #interp:empty { display: none; }
+  .fhead button.toggle { flex: 1; text-align: left; font-size: .85rem; padding: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .preview { margin: 0; color: var(--muted); font-size: .92rem; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* A question and its answer, tied together by a rule on the left */
+  .qa { display: grid; gap: 8px; padding-left: 10px; border-left: 2px solid var(--gas); }
+  .qa .field + .field { margin-left: 12px; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .actions button, .actions select { font-size: .85rem; padding: 4px 10px; }
   .actions select { font-family: inherit; color: var(--ink); background: var(--surface);
@@ -190,9 +203,11 @@
   <main>
     <div id="list"></div>
     <div id="final"></div>
+    <div id="interp"></div>
     <div class="foot">
       <button type="button" id="addStanza">Add stanza</button>
       <button type="button" id="addFinal">Add conclusion</button>
+      <button type="button" id="addInterp">Add interpretation</button>
       <button type="button" class="quiet" id="logout">Disconnect Dropbox on this device</button>
       <span class="muted">Files are in Dropbox: Apps → your app’s folder.</span>
     </div>
@@ -201,7 +216,10 @@
 
 <div id="toast" role="alert"></div>
 
-<div id="poemList" role="listbox" tabindex="-1" aria-label="Poems" hidden></div>
+<div id="poemList" hidden>
+  <input id="plSearch" type="search" placeholder="Search poems" autocomplete="off" aria-label="Search poems" aria-controls="plRows">
+  <div id="plRows" role="listbox" aria-label="Poems"></div>
+</div>
 
 <div id="palette" hidden>
   <button type="button" class="sw" data-c="yellow" style="--c: var(--hl-yellow)" aria-label="Highlight yellow" title="Yellow"></button>
@@ -222,7 +240,7 @@
     <input id="newFolderName" placeholder="Poet or Poet/Group" autocomplete="off" aria-label="New folder" hidden>
     <label for="newText">Text</label>
     <textarea id="newText"></textarea>
-    <p class="hint">Paste the whole text with a blank line between stanzas. Or copy columns from a spreadsheet (№, text, my understanding, and optionally a summary): each goes to its place.</p>
+    <p class="hint">Paste the whole text with a blank line between stanzas. Or copy columns from a spreadsheet (№, text, my understanding): each goes to its place.</p>
     <div class="row">
       <button type="button" id="cancelNew">Cancel</button>
       <button type="submit" class="primary">Create</button>
@@ -278,7 +296,15 @@ Stanza text
 
 ...
 
-### Questions (hidden)
+### Other interpretations (hidden)
+
+...
+
+### Question 1
+
+...
+
+### Answer 1
 
 ...
 
@@ -286,18 +312,26 @@ Stanza text
 
 ...
 
-"My understanding" is always written. Optional columns (Summary, Questions,
-Other interpretations) are written only for stanzas that have them;
-" (hidden)" marks a collapsed one. The optional "## Conclusion" comes after
-the last stanza. Older files use Russian headings («Моё понимание»,
-«Выжимка») and still parse.
+## Additional interpretation
+
+...
+
+"My understanding" is always written. "Other interpretations" is optional per
+stanza; " (hidden)" marks a collapsed column or question. Questions are numbered
+by position (shown as Q<stanza>.<n>); "Answer N" belongs to question N. The
+optional poem-level SECTIONS come after the last stanza. Older files use Russian
+headings («Моё понимание») and a single "### Questions"; both still parse.
+Summary sections («Выжимка») are no longer used and are dropped when read.
 
 Highlights are stored inline: <mark class="yellow">…</mark>. A literal "<mark"
 or "</mark" typed by the user gets its preceding backslashes doubled plus one;
 backslashes right before a real tag are doubled (encodeMarks/decodeMarks).
 */
-const EXTRAS = [['sum', 'Summary'], ['q', 'Questions'], ['oth', 'Other interpretations']];
-const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^(summary|выжим)/, 'sum'], [/^question/, 'q'], [/^other/, 'oth']];
+const EXTRAS = [['oth', 'Other interpretations']];
+const SECTIONS = [['final', 'Conclusion'], ['interp', 'Additional interpretation']];
+// ### heading → field; null drops the section's lines
+const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'oth'], [/^question/, 'q'], [/^answer/, 'a'],
+  [/^(summary|выжим)/, null]];
 const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 
 const escLine = s => s.replace(/^(\\*#)/gm, '\\$1');
@@ -334,11 +368,9 @@ function decodeMarks(raw) {
   return { text, ranges };
 }
 
-function newStanza(text, und, sum) {
-  const s = { text: text || '', und: und || '', hidden: [], marks: {} };
-  if (sum) s.sum = sum;
-  return s;
-}
+// qs: [{ q, a?, hidden, marks }]: each question carries its own highlights, so fieldEl works on it
+const newStanza = (text, und) => ({ text: text || '', und: und || '', hidden: [], marks: {}, qs: [] });
+const newQuestion = () => ({ q: '', hidden: false, marks: {} });
 
 function serialize(m) {
   const parts = ['# ' + m.title.replace(/\n/g, ' ')];
@@ -348,9 +380,13 @@ function serialize(m) {
     EXTRAS.forEach(([k, label]) => {
       if (s[k] != null) parts.push('### ' + label + (s.hidden.includes(k) ? ' (hidden)' : ''), field(s, k));
     });
+    s.qs.forEach((q, j) => {
+      parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
+      if (q.a != null) parts.push('### Answer ' + (j + 1), field(q, 'a'));
+    });
   });
-  if (m.final != null) parts.push('## Conclusion', field(m, 'final'));
-  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n') + '\n';
+  SECTIONS.forEach(([k, label]) => { if (m[k] != null) parts.push('## ' + label, field(m, k)); });
+  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '') + '\n';
 }
 
 function setField(o, k, lines) {
@@ -359,38 +395,53 @@ function setField(o, k, lines) {
   if (d.ranges.length) o.marks[k] = d.ranges;
 }
 function parseMd(md, fallbackTitle) {
-  let title = fallbackTitle, cur = null, field = 'text', fin = null;
-  const stanzas = [];
+  let title = fallbackTitle, cur = null, buf = null, started = false;   // buf: where content lines go
+  const stanzas = [], secs = {};
   for (const line of md.replace(/\r/g, '').split('\n')) {
-    if (!cur && /^# /.test(line)) { title = line.slice(2).trim() || title; continue; }
+    if (!started && /^# /.test(line)) { title = line.slice(2).trim() || title; continue; }
     if (/^## /.test(line)) {
-      if (/^## conclusion\s*$/i.test(line)) { cur = fin = { final: [] }; field = 'final'; continue; }
-      cur = { text: [], und: [], hidden: [] }; stanzas.push(cur); field = 'text'; continue;
+      started = true;
+      const h = line.slice(3).trim().toLowerCase();
+      const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
+      if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
+      cur = { text: [], und: [], hidden: [], qs: [] }; stanzas.push(cur); buf = cur.text; continue;
     }
-    if (cur && cur !== fin && /^### /.test(line)) {
+    if (cur && /^### /.test(line)) {
       let h = line.slice(4).trim().toLowerCase();
       const hidden = /\(hidden\)$/.test(h);
       h = h.replace(/\s*\(hidden\)$/, '');
       const match = HEADINGS.find(([re]) => re.test(h));
-      if (match) {
-        field = match[1];
-        if (!cur[field]) cur[field] = [];
-        if (hidden && field !== 'und' && !cur.hidden.includes(field)) cur.hidden.push(field);
-        if (/^выжим/.test(h)) cur.legacySum = true;
+      if (!match) continue;
+      const f = match[1];
+      if (f === null) buf = null;
+      else if (f === 'q') { const q = { q: [], hidden }; cur.qs.push(q); buf = q.q; }
+      else if (f === 'a') {
+        // "Answer N" belongs to question N; without a number, to the last question
+        let q = cur.qs[parseInt(h.replace(/^\D+/, ''), 10) - 1] || cur.qs[cur.qs.length - 1];
+        if (!q) { q = { q: [], hidden: false }; cur.qs.push(q); }
+        buf = q.a = [];
+      } else {
+        buf = cur[f] = cur[f] || [];
+        if (hidden && f !== 'und' && !cur.hidden.includes(f)) cur.hidden.push(f);
       }
       continue;
     }
-    if (cur) cur[field].push(unescLine(line));
+    if (buf) buf.push(unescLine(line));
   }
   const m = { title, marks: {}, stanzas: stanzas.map(s => {
     const out = newStanza();
     ['text', 'und', ...EXTRAS.map(([k]) => k)].forEach(k => { if (s[k]) setField(out, k, s[k]); });
-    // Old files always wrote an empty «Выжимка»: don't turn it into an empty Summary column
-    if (s.legacySum && !out.sum) delete out.sum;
     out.hidden = s.hidden.filter(k => out[k] != null);
+    out.qs = s.qs.map(q => {
+      const o = newQuestion();
+      o.hidden = q.hidden;
+      setField(o, 'q', q.q);
+      if (q.a) setField(o, 'a', q.a);
+      return o;
+    });
     return out;
   }) };
-  if (fin) setField(m, 'final', fin.final);
+  SECTIONS.forEach(([k]) => { if (secs[k]) setField(m, k, secs[k]); });
   return m;
 }
 
@@ -421,7 +472,7 @@ function parseImport(text) {
       if (/^(№|no\.?|#)$/i.test(cols[0]) || /^(текст|text)$/i.test(cols[1])) continue;
       const c = /^\d+\.?$/.test(cols[0]) ? cols.slice(1) : cols;
       if (!c.some(Boolean)) continue;
-      out.push(newStanza(c[0], c[1], c[2]));
+      out.push(newStanza(c[0], c[1]));   // a 4th column (old Summary) is ignored
     }
     return out;
   }
@@ -697,6 +748,7 @@ async function open(k) {
   const e = cache.poems[k];
   if (!e) return;
   current = k; touch(); $('#poem').value = k;
+  interpOpen = false;
   const needs = e.md == null || (!e.dirty && e.remoteRev && e.rev !== e.remoteRev);
   if (needs && navigator.onLine && e.remoteRev) {
     try {
@@ -720,8 +772,37 @@ function emptyEl(msg) {
 function renderEmpty(msg) {
   document.body.append(palette); palette.hidden = true;
   $('#list').innerHTML = ''; $('#list').append(emptyEl(msg));
-  $('#final').innerHTML = '';
-  $('#addStanza').hidden = $('#addFinal').hidden = true;
+  $('#final').innerHTML = ''; $('#interp').innerHTML = '';
+  $('#addStanza').hidden = $('#addFinal').hidden = $('#addInterp').hidden = true;
+}
+
+let interpOpen = false;   // Additional interpretation: collapsed whenever a poem opens (not saved)
+function interpEl() {
+  const label = 'Additional interpretation';
+  const toggle = button((interpOpen ? '▾ ' : '▸ ') + label, 'toggle', () => {
+    interpOpen = !interpOpen; render();
+    if (interpOpen) $('#interp').scrollIntoView({ block: 'nearest' });
+  });
+  toggle.setAttribute('aria-expanded', String(interpOpen));
+  const remove = button('Remove', '', () => {
+    if (model.interp && !confirm('Remove the additional interpretation? Its text will be deleted.')) return;
+    delete model.interp; delete model.marks.interp; changed(); render();
+  });
+  if (interpOpen) {
+    const el = fieldEl(model, 'interp', 'finterp', label, '', [remove]);
+    const l = el.querySelector('label');
+    l.className = 'sr';   // the toggle shows the name; the label stays for the textarea and the palette
+    l.before(toggle);
+    return el;
+  }
+  const wrap = document.createElement('div'); wrap.className = 'field';
+  const head = document.createElement('div'); head.className = 'fhead';
+  head.append(toggle, remove);
+  const p = document.createElement('p'); p.className = 'preview';
+  p.textContent = (model.interp.split('\n').find(x => x.trim()) || 'Empty').replace(/^#+\s*/, '');
+  p.addEventListener('click', () => { interpOpen = true; render(); });
+  wrap.append(head, p);
+  return wrap;
 }
 
 function render() {
@@ -736,8 +817,12 @@ function render() {
     if (model.final && !confirm('Remove the conclusion? Its text will be deleted.')) return;
     delete model.final; delete model.marks.final; changed(); render();
   })]));
+  const ip = $('#interp');
+  ip.innerHTML = '';
+  if (model.interp != null) ip.append(interpEl());
   $('#addStanza').hidden = false;
   $('#addFinal').hidden = model.final != null;
+  $('#addInterp').hidden = model.interp != null;
   document.querySelectorAll('main textarea').forEach(grow);
 }
 function focusField(id) {
@@ -774,10 +859,13 @@ function stanzaEl(s, i) {
   const art = document.createElement('article'); art.className = 'stanza';
   const num = document.createElement('div'); num.className = 'num'; num.textContent = i + 1;
   const f = document.createElement('div'); f.className = 'fields';
-  f.append(fieldEl(s, 'text', 'f' + i + 'text', 'Text', 'verse'), fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', ''));
+  const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '');
+  if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
+  f.append(fieldEl(s, 'text', 'f' + i + 'text', 'Text', 'verse'), und);
 
   const shown = EXTRAS.filter(([k]) => s[k] != null && !s.hidden.includes(k));
-  if (shown.length) {
+  const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
+  if (shown.length || shownQs.length) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
     shown.forEach(([k, label]) => ex.append(fieldEl(s, k, 'f' + i + k, label, '', [
@@ -787,6 +875,7 @@ function stanzaEl(s, i) {
         delete s[k]; delete s.marks[k]; s.hidden = s.hidden.filter(x => x !== k); changed(); render();
       })
     ])));
+    shownQs.forEach(([q, j]) => ex.append(questionEl(s, i, q, j)));
     f.append(ex);
   }
 
@@ -800,30 +889,74 @@ function stanzaEl(s, i) {
       s.hidden = s.hidden.filter(x => x !== k); changed(); render(); focusField('f' + i + k);
     }));
   });
-  const missing = EXTRAS.filter(([k]) => s[k] == null);
-  if (missing.length) {
-    const add = document.createElement('select');
-    add.setAttribute('aria-label', 'Add a column to stanza ' + (i + 1));
-    [['', '+ Column'], ...missing].forEach(([k, label]) => {
-      const o = document.createElement('option'); o.value = k; o.textContent = label; add.append(o);
-    });
-    add.addEventListener('change', () => {
-      if (!add.value) return;
-      s[add.value] = ''; changed(); render(); focusField('f' + i + add.value);
-    });
-    a.append(add);
-  }
+  s.qs.forEach((q, j) => {
+    if (q.hidden) a.append(button('Show Q' + (i + 1) + '.' + (j + 1), '', () => {
+      q.hidden = false; changed(); render(); focusField('f' + i + 'q' + j);
+    }));
+  });
+  const add = document.createElement('select');
+  add.setAttribute('aria-label', 'Add a column to stanza ' + (i + 1));
+  [['', '+ Column'], ['q', 'Question'], ...EXTRAS.filter(([k]) => s[k] == null)].forEach(([k, label]) => {
+    const o = document.createElement('option'); o.value = k; o.textContent = label; add.append(o);
+  });
+  add.addEventListener('change', () => {
+    if (add.value === 'q') addQuestion(s, i);
+    else if (add.value) { s[add.value] = ''; changed(); render(); focusField('f' + i + add.value); }
+  });
+  a.append(add);
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
-    const val = k => encodeMarks(s[k], s.marks[k]);
-    let t = '“' + model.title + '”, stanza ' + (i + 1) + '\n\n' + val('text') + '\n\nMy understanding:\n' + (s.und ? val('und') : '—');
-    EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + val(k); });
+    const val = (o, k) => encodeMarks(o[k], o.marks[k]);
+    let t = '“' + model.title + '”, stanza ' + (i + 1) + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
+    EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + val(s, k); });
+    s.qs.forEach((q, j) => {
+      const n = (i + 1) + '.' + (j + 1);
+      if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
+    });
     copy(t);
   }));
   f.append(a);
   art.append(num, f);
   return art;
 }
+
+// Question j of stanza i («Q2.1») with its optional answer («A2.1») in one block
+function questionEl(s, i, q, j) {
+  const n = (i + 1) + '.' + (j + 1);
+  const box = document.createElement('div'); box.className = 'qa';
+  const tools = [
+    button('Hide', '', () => { q.hidden = true; changed(); render(); }),
+    button('Remove', '', () => {
+      if ((q.q || q.a) && !confirm('Remove Q' + n + (q.a != null ? ' and its answer' : '') + '? Its text will be deleted.')) return;
+      s.qs.splice(j, 1); changed(); render();
+    })
+  ];
+  if (q.a == null) tools.unshift(button('+ Answer', '', () => { q.a = ''; changed(); render(); focusField('f' + i + 'a' + j); }));
+  box.append(fieldEl(q, 'q', 'f' + i + 'q' + j, 'Q' + n, '', tools));
+  if (q.a != null) box.append(fieldEl(q, 'a', 'f' + i + 'a' + j, 'A' + n, '', [button('Remove', '', () => {
+    if (q.a && !confirm('Remove A' + n + '? Its text will be deleted.')) return;
+    delete q.a; delete q.marks.a; changed(); render();
+  })]));
+  return box;
+}
+function addQuestion(s, i) {
+  s.qs.push(newQuestion());
+  changed(); render();
+  focusField('f' + i + 'q' + (s.qs.length - 1));
+}
+// Ctrl+Enter in «My understanding» or a question adds a question; Shift+Tab goes back
+// from a question to «My understanding» and from an answer to its question
+document.addEventListener('keydown', e => {
+  const m = /^f(\d+)(und|q|a)(\d*)$/.exec(e.target.id || '');
+  if (!m || !model || e.target.tagName !== 'TEXTAREA') return;
+  const i = +m[1], s = model.stanzas[i];
+  if (!s) return;
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && m[2] !== 'a') { e.preventDefault(); addQuestion(s, i); }
+  else if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && m[2] !== 'und') {
+    e.preventDefault();
+    document.getElementById('f' + i + (m[2] === 'q' ? 'und' : 'q' + m[3])).focus();
+  }
+});
 
 /* ============ Highlighting ============ */
 function paintBackdrop(t) {
@@ -876,7 +1009,9 @@ function track() { const t = document.activeElement; if (isField(t)) sel = { t, 
 document.addEventListener('focusin', e => {
   if (!isField(e.target)) return;
   clearTimeout(hideTimer);
-  e.target.closest('.field').querySelector('label').after(palette);
+  // PC: in the sticky top bar, so nothing in the stanza shifts or wraps; touch: next to the field's label
+  if (finePointer.matches) $('#copyAll').before(palette);
+  else e.target.closest('.field').querySelector('label').after(palette);
   palette.hidden = false;
   track();
 });
@@ -920,35 +1055,95 @@ function copyFallback(text) {
 // of truth: choosing here sets its value and fires its change event.
 const poemList = $('#poemList');
 const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+const plRows = $('#plRows'), plSearch = $('#plSearch');
+const openFolders = new Set(store.get('st.open') || []);   // lowercased folder paths open in the list
+const saveOpen = () => store.set('st.open', [...openFolders]);
+const byName = (a, b) => nameOf(cache.poems[a]).localeCompare(nameOf(cache.poems[b]));
 function setActive(d) {
-  poemList.querySelectorAll('.active').forEach(x => x.classList.remove('active'));
-  if (d) { d.classList.add('active'); poemList.setAttribute('aria-activedescendant', d.id); }
+  plRows.querySelectorAll('.active').forEach(x => x.classList.remove('active'));
+  if (d) { d.classList.add('active'); plSearch.setAttribute('aria-activedescendant', d.id); }
+}
+// Visible rows: a folder tree (root poems first, then folders; closed folders hide their contents),
+// or, while searching, every poem whose name matches, with its folder path
+function poemRows() {
+  const q = plSearch.value.trim().toLowerCase(), keys = Object.keys(cache.poems), rows = [];
+  if (q) {
+    keys.filter(k => nameOf(cache.poems[k]).toLowerCase().includes(q)).sort(byName)
+      .forEach(k => rows.push({ k, depth: 0, path: folderLabel(folderOf(cache.poems[k])) }));
+    return rows;
+  }
+  const root = { kids: new Map(), poems: [] };
+  for (const k of keys) {
+    let node = root, path = '';
+    for (const seg of folderOf(cache.poems[k]).split('/').filter(Boolean)) {
+      path += '/' + seg;
+      const id = path.toLowerCase();
+      if (!node.kids.has(id)) node.kids.set(id, { name: seg, id, kids: new Map(), poems: [] });
+      node = node.kids.get(id);
+    }
+    node.poems.push(k);
+  }
+  const count = n => n.poems.length + [...n.kids.values()].reduce((sum, c) => sum + count(c), 0);
+  (function walk(node, depth) {
+    node.poems.sort(byName).forEach(k => rows.push({ k, depth }));
+    [...node.kids.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+      const open = openFolders.has(c.id);
+      rows.push({ folder: c.id, name: c.name, depth, open, n: count(c) });
+      if (open) walk(c, depth + 1);
+    });
+  })(root, 0);
+  return rows;
+}
+function renderRows(keepActive) {
+  const prev = keepActive && plRows.querySelector('.active'), prevId = prev && (prev.dataset.value || prev.dataset.folder);
+  plRows.innerHTML = '';
+  poemRows().forEach((r, n) => {
+    const d = document.createElement('div');
+    d.id = 'pl' + n;
+    d.style.paddingLeft = (14 + r.depth * 18) + 'px';
+    if (r.folder) {
+      d.className = 'folder'; d.dataset.folder = r.folder; d.setAttribute('aria-expanded', String(r.open));
+      d.textContent = (r.open ? '▾ ' : '▸ ') + r.name;
+      const c = document.createElement('span'); c.className = 'count'; c.textContent = r.n;
+      d.append(c);
+    } else {
+      d.className = 'item'; d.setAttribute('role', 'option'); d.dataset.value = r.k;
+      d.textContent = nameOf(cache.poems[r.k]);
+      d.setAttribute('aria-selected', String(r.k === $('#poem').value));
+      if (r.path) { const p = document.createElement('span'); p.className = 'path'; p.textContent = r.path; d.append(p); }
+    }
+    plRows.append(d);
+  });
+  if (!plRows.children.length) {
+    const none = document.createElement('div'); none.className = 'none'; none.textContent = 'No poems match.';
+    plRows.append(none);
+  }
+  const rows = [...plRows.querySelectorAll('.item, .folder')];
+  const act = (prevId && rows.find(x => (x.dataset.value || x.dataset.folder) === prevId))
+    || (!plSearch.value.trim() && plRows.querySelector('[aria-selected="true"]')) || rows[0];
+  setActive(act);
+  if (act) act.scrollIntoView({ block: 'nearest' });
+}
+function toggleFolder(id, open) {
+  if (open === undefined) open = !openFolders.has(id);
+  if (open) openFolders.add(id); else openFolders.delete(id);
+  saveOpen(); renderRows(true);
 }
 function openPoemList() {
-  const sel = $('#poem'), r = sel.getBoundingClientRect();
-  poemList.innerHTML = '';
-  let n = 0;
-  const item = (o, nested) => {
-    const d = document.createElement('div');
-    d.id = 'pl' + n++; d.className = 'item' + (nested ? ' nested' : ''); d.setAttribute('role', 'option');
-    d.dataset.value = o.value; d.textContent = o.textContent;
-    d.setAttribute('aria-selected', String(o.value === sel.value));
-    return d;
-  };
-  for (const el of sel.children) {
-    if (el.tagName === 'OPTGROUP') {
-      const g = document.createElement('div'); g.className = 'group'; g.textContent = el.label;
-      poemList.append(g, ...[...el.children].map(o => item(o, true)));
-    } else poemList.append(item(el, false));
+  if (!Object.keys(cache.poems).length) return;
+  // Always show where the open poem is
+  if (current && cache.poems[current]) {
+    let p = '';
+    for (const seg of folderOf(cache.poems[current]).split('/').filter(Boolean)) { p += '/' + seg; openFolders.add(p.toLowerCase()); }
+    saveOpen();
   }
-  if (!n) return;
+  const r = $('#poem').getBoundingClientRect();
+  plSearch.value = '';
   poemList.style.left = r.left + 'px';
   poemList.style.top = (r.bottom + 4) + 'px';
   poemList.hidden = false;
-  const cur = poemList.querySelector('[aria-selected="true"]') || poemList.querySelector('.item');
-  setActive(cur);
-  cur.scrollIntoView({ block: 'nearest' });
-  poemList.focus();
+  renderRows(false);
+  plSearch.focus();
 }
 function closePoemList(refocus) {
   if (poemList.hidden) return;
@@ -969,17 +1164,25 @@ $('#poem').addEventListener('keydown', e => {
   if (!finePointer.matches) return;
   if (e.key === 'Enter' || e.key === ' ' || e.key === 'F4' || (e.altKey && e.key === 'ArrowDown')) { e.preventDefault(); openPoemList(); }
 });
-poemList.addEventListener('click', e => { const d = e.target.closest('.item'); if (d) choosePoem(d); });
-poemList.addEventListener('mousemove', e => { const d = e.target.closest('.item'); if (d) setActive(d); });
-poemList.addEventListener('keydown', e => {
-  const items = [...poemList.querySelectorAll('.item')], i = items.indexOf(poemList.querySelector('.active'));
-  const go = j => { const d = items[Math.max(0, Math.min(items.length - 1, j))]; setActive(d); d.scrollIntoView({ block: 'nearest' }); };
+// Keep the focus in the search box while clicking rows, so the keyboard keeps working
+poemList.addEventListener('mousedown', e => { if (e.target !== plSearch) e.preventDefault(); });
+plRows.addEventListener('click', e => {
+  const d = e.target.closest('.item, .folder');
+  if (!d) return;
+  if (d.dataset.folder) toggleFolder(d.dataset.folder); else choosePoem(d);
+});
+plRows.addEventListener('mousemove', e => { const d = e.target.closest('.item, .folder'); if (d && !d.classList.contains('active')) setActive(d); });
+plSearch.addEventListener('input', () => renderRows(false));
+plSearch.addEventListener('keydown', e => {
+  const rows = [...plRows.querySelectorAll('.item, .folder')], act = plRows.querySelector('.active'), i = rows.indexOf(act);
+  const go = j => { const d = rows[Math.max(0, Math.min(rows.length - 1, j))]; if (d) { setActive(d); d.scrollIntoView({ block: 'nearest' }); } };
+  const folder = act && act.dataset.folder, typing = plSearch.value !== '';
   if (e.key === 'ArrowDown') { e.preventDefault(); go(i + 1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); go(i - 1); }
-  else if (e.key === 'Home') { e.preventDefault(); go(0); }
-  else if (e.key === 'End') { e.preventDefault(); go(items.length - 1); }
-  else if (e.key === 'Enter') { e.preventDefault(); if (items[i]) choosePoem(items[i]); }
-  else if (e.key === 'Escape') { e.preventDefault(); closePoemList(true); }
+  else if (e.key === 'ArrowRight' && folder && !typing) { e.preventDefault(); toggleFolder(folder, true); }
+  else if (e.key === 'ArrowLeft' && folder && !typing) { e.preventDefault(); toggleFolder(folder, false); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (folder) toggleFolder(folder); else if (act) choosePoem(act); }
+  else if (e.key === 'Escape') { e.preventDefault(); if (typing) { plSearch.value = ''; renderRows(false); } else closePoemList(true); }
   else if (e.key === 'Tab') closePoemList(false);
 });
 document.addEventListener('mousedown', e => {
@@ -1014,6 +1217,12 @@ $('#addFinal').addEventListener('click', () => {
   model.final = '';
   changed(); render();
   focusField('ffinal');
+});
+$('#addInterp').addEventListener('click', () => {
+  if (!model) return;
+  model.interp = ''; interpOpen = true;
+  changed(); render();
+  focusField('finterp');
 });
 
 const dlg = $('#newDialog');

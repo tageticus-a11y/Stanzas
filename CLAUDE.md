@@ -52,33 +52,52 @@ verse lines
 
 notes
 
-### Questions (hidden)
+### Other interpretations (hidden)
 
 optional column with a <mark class="yellow">highlight</mark>
+
+### Question 1
+
+shown as Q<stanza>.1
+
+### Answer 1
+
+optional answer to question 1
 
 ## Conclusion
 
 optional, after the last stanza
+
+## Additional interpretation
+
+optional, long (pasted from Claude), shown collapsed
 ```
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
-- `### My understanding` is always written, even when empty. Optional columns
-  (`### Summary`, `### Questions`, `### Other interpretations`, see `EXTRAS`)
-  exist per stanza and are written only when present (even if empty);
-  a ` (hidden)` suffix marks a collapsed column.
-- `## Conclusion` (optional, poem-level) comes after the last stanza; any other
-  `## ` heading starts a stanza.
+- `### My understanding` is always written, even when empty.
+  `### Other interpretations` (`EXTRAS`) is optional per stanza.
+- Questions: a stanza has any number of `### Question N` sections. N is the
+  position, renumbered on removal, and the UI shows «Q<stanza>.<N>».
+  `### Answer N` (at most one per question) belongs to question N; an answer
+  without a number goes to the last question. In memory:
+  `stanza.qs = [{ q, a?, hidden, marks }]`. The legacy single `### Questions`
+  becomes question 1.
+- A ` (hidden)` suffix marks a collapsed column or question.
+- Poem-level `SECTIONS` come after the last stanza: `## Conclusion`, then
+  `## Additional interpretation`. Any other `## ` heading starts a stanza. The
+  interpretation shows collapsed whenever a poem opens; that state isn't saved.
+- Summary is gone: `### Summary` / `### Выжимка` sections are dropped when
+  read, and a 4th TSV import column is ignored.
 - Highlights are stored inline as `<mark class="COLOR">…</mark>`, COLOR one of
   `COLORS` (yellow, green, blue, pink, violet); in memory they are ranges
   `obj.marks[field] = [[start, end, color]]` over the plain text. Backslashes
   before a literal `<mark`/`</mark>` are escaped (`encodeMarks`/`decodeMarks`).
   In the UI each field is a transparent textarea over a `.backdrop` that draws
   the marks; keep their font, padding and border identical.
-- Legacy files use Russian headings (`### Моё понимание`, `### Выжимка`) and
-  must keep parsing (`HEADINGS`). An empty legacy `Выжимка` is dropped on load
-  (old versions always wrote it); files are re-saved with English headings.
+- Legacy files use Russian headings (`### Моё понимание`) and must keep
+  parsing (`HEADINGS`); files are re-saved with English headings.
 - Import (`parseImport`) accepts TSV copied from Google Sheets (columns
-  №, text, my understanding, optional summary; Russian or English header row; quoted cells with newlines) or plain text
+  №, text, my understanding; Russian or English header row; quoted cells with newlines) or plain text
   with blank lines between stanzas.
 
 ## Conventions
@@ -92,7 +111,14 @@ optional, after the last stanza
 - The poem picker is a native `<select id="poem">` (source of truth; tests use
   `selectOption`). On fine-pointer devices a click opens our own `#poemList`
   instead, because Edge draws the native list cramped or cut off on some
-  setups. Touch devices (iPhone) keep the native picker.
+  setups. It is a collapsible folder tree with search; open folders are
+  remembered per device in `st.open`. Touch devices (iPhone) keep the native
+  picker.
+- The highlight palette sits in the sticky top bar on fine-pointer devices, and
+  on its own row under the focused field's label on touch.
+- Keyboard: Ctrl/Cmd+Enter in «My understanding» or a question adds a
+  question. Shift+Tab goes from a question back to «My understanding», and
+  from an answer back to its question.
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.
