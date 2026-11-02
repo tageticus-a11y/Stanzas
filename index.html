@@ -133,7 +133,7 @@
     background: var(--paper); color: var(--ink); padding: 20px; }
   dialog::backdrop { background: rgba(10, 15, 20, .5); }
   dialog h2 { margin: 0 0 12px; font: 400 1.3rem 'PT Serif', Georgia, serif; }
-  dialog input { width: 100%; font: inherit; color: var(--ink); background: var(--surface);
+  dialog input, dialog select { width: 100%; font: inherit; color: var(--ink); background: var(--surface);
     border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
   dialog textarea { min-height: 14em; max-height: 50vh; overflow: auto; font-family: 'PT Serif', Georgia, serif; }
   dialog .hint { color: var(--muted); font-size: .85rem; margin: 6px 0 14px; }
@@ -201,6 +201,9 @@
     <h2>New poem</h2>
     <label for="newName">Title (becomes the file name)</label>
     <input id="newName" required autocomplete="off">
+    <label for="newFolder">Folder</label>
+    <select id="newFolder"></select>
+    <input id="newFolderName" placeholder="Poet or Poet/Group" autocomplete="off" aria-label="New folder" hidden>
     <label for="newText">Text</label>
     <textarea id="newText"></textarea>
     <p class="hint">Paste the whole text with a blank line between stanzas. Or copy columns from a spreadsheet (№, text, my understanding, and optionally a summary): each goes to its place.</p>
@@ -481,19 +484,23 @@ async function rpc(endpoint, args) {
     body: JSON.stringify(args) }));
   return r.json();
 }
+// The whole app folder, including Poet/Group subfolders
 async function listRemote() {
-  let res = await rpc('files/list_folder', { path: '' });
+  let res = await rpc('files/list_folder', { path: '', recursive: true });
   let all = res.entries;
   while (res.has_more) { res = await rpc('files/list_folder/continue', { cursor: res.cursor }); all = all.concat(res.entries); }
-  return all.filter(x => x['.tag'] === 'file' && /\.md$/i.test(x.name))
-    .map(x => ({ path: x.path_display, name: x.name, rev: x.rev }));
+  return {
+    files: all.filter(x => x['.tag'] === 'file' && /\.md$/i.test(x.name))
+      .map(x => ({ path: x.path_display, rev: x.rev, mod: x.server_modified })),
+    folders: all.filter(x => x['.tag'] === 'folder').map(x => x.path_display).sort((a, b) => a.localeCompare(b))
+  };
 }
 async function download(path) {
   const r = await authed(t => fetch('https://content.dropboxapi.com/2/files/download', {
     method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Dropbox-API-Arg': hdr({ path }) } }));
-  let rev = null;
-  try { rev = JSON.parse(r.headers.get('Dropbox-API-Result')).rev; } catch (e) {}
-  return { text: await r.text(), rev };
+  let meta = {};
+  try { meta = JSON.parse(r.headers.get('Dropbox-API-Result')) || {}; } catch (e) {}
+  return { text: await r.text(), rev: meta.rev || null, mod: meta.server_modified };
 }
 async function upload(path, text, rev, autorename) {
   const arg = { path, mode: rev ? { '.tag': 'update', update: rev } : 'add', autorename: !!autorename, mute: true };
@@ -505,12 +512,42 @@ async function upload(path, text, rev, autorename) {
 }
 
 /* ============ Local cache and sync ============ */
-// cache.poems[key] = { path, rev, remoteRev, md, dirty, ver }
+// cache.poems[key] = { path, rev, remoteRev, md, dirty, ver, mod, ownMod }; key = lowercased path.
+// mod is Dropbox's server_modified; ownMod is the mod of this device's last upload.
+// cache.folders = Dropbox folder paths (Poet, Poet/Group, …)
 const cache = store.get('st.cache') || { poems: {} };
 const saveCache = () => store.set('st.cache', cache);
 const nameOf = e => e.path.split('/').pop().replace(/\.md$/i, '');
+const folderOf = e => e.path.slice(0, e.path.lastIndexOf('/'));
+const folderLabel = p => p.split('/').filter(Boolean).join(' › ');
+const cleanName = s => s.replace(/[\/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
 let current = null, model = null, syncing = false;
 const timers = {}, pushing = {};
+
+/* Last poem across devices. st.current = { key, ack }: ack is the newest mod made on another
+   device that this device had seen when the user last opened or edited a poem here. A newer
+   edit from elsewhere means the user has since worked on another device: open that poem. */
+function lastUsed() {
+  const c = store.get('st.current');
+  return typeof c === 'string' ? { key: c, ack: '' } : c || {};
+}
+function newestForeign() {
+  let best = null;
+  for (const [k, e] of Object.entries(cache.poems))
+    if (e.mod && e.mod !== e.ownMod && (!best || e.mod > cache.poems[best].mod)) best = k;
+  return best;
+}
+function touch() {
+  if (!current) return;
+  const nf = newestForeign();
+  store.set('st.current', { key: current, ack: nf ? cache.poems[nf].mod : '' });
+}
+function allFolders() {
+  const seen = new Map();
+  [...(cache.folders || []), ...Object.values(cache.poems).map(folderOf)]
+    .forEach(f => { if (f && !seen.has(f.toLowerCase())) seen.set(f.toLowerCase(), f); });
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
 
 function handleErr(e) {
   if (e instanceof AuthError) { show('login'); toast(e.message, true); return; }
@@ -525,18 +562,30 @@ async function sync() {
     if (!navigator.onLine) { setStatus(OFFLINE); return; }
     setStatus('Syncing…');
     await pushAll();
-    const remote = await listRemote();
+    const { files, folders } = await listRemote();
+    cache.folders = folders;
     const seen = new Set();
-    for (const r of remote) {
+    for (const r of files) {
       const k = r.path.toLowerCase(); seen.add(k);
       const e = cache.poems[k];
-      if (e) { e.remoteRev = r.rev; e.path = r.path; }
-      else cache.poems[k] = { path: r.path, rev: null, remoteRev: r.rev, md: null, dirty: false, ver: 0 };
+      if (e) { e.remoteRev = r.rev; e.path = r.path; e.mod = r.mod; }
+      else cache.poems[k] = { path: r.path, rev: null, remoteRev: r.rev, md: null, dirty: false, ver: 0, mod: r.mod };
     }
     for (const k of Object.keys(cache.poems)) if (!seen.has(k) && !cache.poems[k].dirty) delete cache.poems[k];
     saveCache();
     renderPicker();
-    if (!current || !cache.poems[current]) await openFirst();
+    if (current && !cache.poems[current]) {
+      // The open poem was moved or renamed in Dropbox: follow it by file name
+      const file = current.split('/').pop();
+      const same = Object.keys(cache.poems).filter(k => k.split('/').pop() === file);
+      if (same.length === 1) await open(same[0]); else current = null;
+    }
+    const nf = newestForeign(), cur = current && cache.poems[current];
+    const busy = document.activeElement.matches('textarea, input') || dlg.open || (cur && cur.dirty);
+    if (nf && nf !== current && cache.poems[nf].mod > (lastUsed().ack || '') && !busy) {
+      await open(nf);
+      toast('Opened “' + nameOf(cache.poems[nf]) + '”: last edited on another device.');
+    } else if (!current) await openFirst();
     else {
       const e = cache.poems[current];
       if (!e.dirty && e.rev !== e.remoteRev && !document.activeElement.matches('textarea')) await open(current);
@@ -549,7 +598,7 @@ async function sync() {
 function changed() {
   const e = cache.poems[current];
   e.md = serialize(model); e.dirty = true; e.ver = (e.ver || 0) + 1;
-  saveCache();
+  saveCache(); touch();
   setStatus('Unsaved edits');
   schedulePush(current);
 }
@@ -574,6 +623,7 @@ async function push(k) {
   try {
     const res = await upload(e.path, e.md, e.rev);
     e.rev = e.remoteRev = res.rev;
+    e.mod = e.ownMod = res.server_modified;
     if (e.ver === ver) e.dirty = false;
     saveCache();
     setStatus(e.dirty ? 'Unsaved edits' : 'Saved');
@@ -587,9 +637,11 @@ async function resolveConflict(k) {
   const mine = e.md;
   const copy = await upload(e.path.replace(/\.md$/i, '') + ' (my version).md', mine, null, true);
   const ck = copy.path_display.toLowerCase();
-  cache.poems[ck] = { path: copy.path_display, rev: copy.rev, remoteRev: copy.rev, md: mine, dirty: false, ver: 0 };
+  cache.poems[ck] = { path: copy.path_display, rev: copy.rev, remoteRev: copy.rev, md: mine, dirty: false, ver: 0,
+    mod: copy.server_modified, ownMod: copy.server_modified };
   const d = await download(e.path);
   e.md = d.text; e.rev = e.remoteRev = d.rev || e.remoteRev; e.dirty = false;
+  if (d.mod) e.mod = d.mod;
   saveCache();
   renderPicker();
   if (current === k) await open(k);
@@ -597,15 +649,27 @@ async function resolveConflict(k) {
 }
 
 /* ============ Opening and rendering ============ */
+// Root poems first, then one group per folder («Poet › Group»)
 function renderPicker() {
   const sel = $('#poem');
-  const keys = Object.keys(cache.poems).sort((a, b) => nameOf(cache.poems[a]).localeCompare(nameOf(cache.poems[b])));
+  const groups = new Map();
+  for (const k of Object.keys(cache.poems)) {
+    const f = folderOf(cache.poems[k]), g = f.toLowerCase();
+    if (!groups.has(g)) groups.set(g, { f, keys: [] });
+    groups.get(g).keys.push(k);
+  }
   sel.innerHTML = '';
-  keys.forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = nameOf(cache.poems[k]); sel.append(o); });
+  [...groups.values()].sort((a, b) => a.f.localeCompare(b.f)).forEach(({ f, keys }) => {
+    let parent = sel;
+    if (f) { parent = document.createElement('optgroup'); parent.label = folderLabel(f); sel.append(parent); }
+    keys.sort((a, b) => nameOf(cache.poems[a]).localeCompare(nameOf(cache.poems[b]))).forEach(k => {
+      const o = document.createElement('option'); o.value = k; o.textContent = nameOf(cache.poems[k]); parent.append(o);
+    });
+  });
   if (current && cache.poems[current]) sel.value = current;
 }
 async function openFirst() {
-  const last = store.get('st.current');
+  const last = lastUsed().key;
   const keys = Object.keys(cache.poems);
   if (last && cache.poems[last]) return open(last);
   if (keys.length) return open($('#poem').options[0].value);
@@ -615,13 +679,15 @@ async function openFirst() {
 async function open(k) {
   const e = cache.poems[k];
   if (!e) return;
-  current = k; store.set('st.current', k); $('#poem').value = k;
+  current = k; touch(); $('#poem').value = k;
   const needs = e.md == null || (!e.dirty && e.remoteRev && e.rev !== e.remoteRev);
   if (needs && navigator.onLine && e.remoteRev) {
     try {
       setStatus('Loading…');
       const d = await download(e.path);
-      e.md = d.text; e.rev = d.rev || e.remoteRev; saveCache();
+      e.md = d.text; e.rev = d.rev || e.remoteRev;
+      if (d.mod) e.mod = d.mod;
+      saveCache();
       setStatus('Synced');
     } catch (err) { handleErr(err); }
   }
@@ -861,17 +927,47 @@ $('#addFinal').addEventListener('click', () => {
 });
 
 const dlg = $('#newDialog');
-$('#newPoem').addEventListener('click', () => { $('#newName').value = ''; $('#newText').value = ''; dlg.showModal(); });
+const NEW_FOLDER = 'new';   // folder paths start with "/", so this can't clash
+$('#newPoem').addEventListener('click', () => {
+  $('#newName').value = ''; $('#newText').value = ''; $('#newFolderName').value = '';
+  const sel = $('#newFolder'), folders = allFolders();
+  sel.innerHTML = '';
+  [['', 'No folder'], ...folders.map(f => [f, folderLabel(f)]), [NEW_FOLDER, 'New folder…']].forEach(([v, label]) => {
+    const o = document.createElement('option'); o.value = v; o.textContent = label; sel.append(o);
+  });
+  // Default to the folder of the open poem, so several poems go into one group quickly
+  const cur = current && cache.poems[current] ? folderOf(cache.poems[current]).toLowerCase() : '';
+  sel.value = folders.find(f => f.toLowerCase() === cur) || '';
+  $('#newFolderName').hidden = true; $('#newFolderName').required = false;
+  dlg.showModal();
+});
+$('#newFolder').addEventListener('change', () => {
+  const n = $('#newFolderName');
+  n.hidden = !(n.required = $('#newFolder').value === NEW_FOLDER);
+  if (!n.hidden) n.focus();
+});
 $('#cancelNew').addEventListener('click', () => dlg.close());
 $('#newForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   const title = $('#newName').value.trim();
-  const fname = title.replace(/[\/\\:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  const fname = cleanName(title);
   if (!fname) { toast('Enter a title.', true); return; }
-  const path = '/' + fname + '.md', k = path.toLowerCase();
-  if (cache.poems[k]) { toast('A poem called “' + fname + '” already exists.', true); return; }
+  const choice = $('#newFolder').value;
+  const segs = (choice === NEW_FOLDER ? $('#newFolderName').value : choice).split('/').map(cleanName).filter(Boolean);
+  if (choice === NEW_FOLDER && !segs.length) { toast('Enter a folder name, e.g. Poet/Group.', true); return; }
+  // Reuse an existing folder's spelling if only the letter case differs
+  const typed = segs.length ? '/' + segs.join('/') : '';
+  const folder = allFolders().find(f => f.toLowerCase() === typed.toLowerCase()) || typed;
+  const path = folder + '/' + fname + '.md', k = path.toLowerCase();
+  if (cache.poems[k]) { toast('A poem called “' + fname + '” already exists' + (folder ? ' in ' + folderLabel(folder) : '') + '.', true); return; }
   const m = { title, stanzas: parseImport($('#newText').value), marks: {} };
   cache.poems[k] = { path, rev: null, remoteRev: null, md: serialize(m), dirty: true, ver: 1 };
+  // Dropbox creates missing folders on upload; list them now so they show up before the next sync
+  const known = new Set(allFolders().map(f => f.toLowerCase()));
+  folder.split('/').slice(1).forEach((_, i, parts) => {
+    const p = '/' + parts.slice(0, i + 1).join('/');
+    if (!known.has(p.toLowerCase())) (cache.folders = cache.folders || []).push(p);
+  });
   saveCache(); dlg.close(); renderPicker();
   await open(k);
   toast('Created with ' + m.stanzas.length + (m.stanzas.length === 1 ? ' stanza' : ' stanzas'));

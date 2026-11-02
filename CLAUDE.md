@@ -18,13 +18,24 @@ lives in the owner's Dropbox. No server of our own, no build step.
   Home Screen apps, whose storage is separate from Safari).
 - **Dropbox app:** scoped, "App folder" access; scopes `files.metadata.read`,
   `files.content.read`, `files.content.write`. All paths are relative to the
-  app folder root (`''`).
+  app folder root (`''`). Poems may live in subfolders (Poet, Poet/Group);
+  `listRemote` lists recursively and also returns the folders
+  (`cache.folders`). The picker groups poems by folder with `<optgroup>`
+  («Poet › Group»), and «New» lets you pick or create a folder (upload
+  creates missing folders). If the open poem's path disappears, sync follows it
+  by file name, so poems can be moved in Dropbox.
 - **Dropbox-API-Arg header** must be ASCII: non-ASCII chars are escaped as `\uXXXX`
   (see `hdr()`). Poem titles are Cyrillic, so this matters.
 - **Local cache:** `st.cache` in localStorage, `poems[lowercased path] =
-  { path, rev, remoteRev, md, dirty, ver }`. Edits update the cache immediately,
+  { path, rev, remoteRev, md, dirty, ver, mod, ownMod }` (`mod` = Dropbox
+  `server_modified`, `ownMod` = mod of this device's last upload). Edits update the cache immediately,
   mark it dirty and upload after 1.5 s of inactivity; also on `online`,
   on `visibilitychange` (hidden → push, visible → sync).
+- **Last poem across devices:** `st.current = { key, ack }`. `touch()` (on
+  open and on edit) sets `ack` to the newest `mod` not made by this device.
+  When sync sees a newer foreign `mod`, it opens that poem, unless a field is
+  focused, the New dialog is open or there are unsaved edits. Server times are
+  compared only with server times, so device clocks don't matter.
 - **Conflicts:** uploads use `mode: update` with the last known rev. On a
   conflict the local version is uploaded as "<name> (my version).md" with
   autorename, and the remote version is reloaded. Never silently overwrite.
