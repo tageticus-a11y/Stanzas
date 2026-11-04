@@ -115,10 +115,10 @@
     white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; pointer-events: none; }
   .hl.verse .backdrop { font: 1.08rem/1.65 'PT Serif', Georgia, serif; padding-left: 0; }
   .hl.verse:focus-within .backdrop { padding-left: 10px; }
-  /* iOS Safari adds 3px of unremovable horizontal padding inside textareas */
-  .ios .backdrop { padding-left: 13px; padding-right: 13px; }
-  .ios .hl.verse .backdrop { padding-left: 3px; }
-  .ios .hl.verse:focus-within .backdrop { padding-left: 13px; }
+  /* Some browsers (iOS Safari) add unremovable horizontal padding inside textareas; --ti is measured in JS */
+  .backdrop { padding-left: calc(10px + var(--ti, 0px)); padding-right: calc(10px + var(--ti, 0px)); }
+  .hl.verse .backdrop { padding-left: var(--ti, 0px); }
+  .hl.verse:focus-within .backdrop { padding-left: calc(10px + var(--ti, 0px)); }
   .backdrop mark { color: inherit; border-radius: 3px; }
   .backdrop .it { font-style: italic; }
   .backdrop .ul { text-decoration: underline; text-underline-offset: 2px; }
@@ -278,8 +278,20 @@ const REDIRECT_URI = location.origin + location.pathname.replace(/index\.html$/,
 
 /* ============ Utilities ============ */
 const $ = s => document.querySelector(s);
-if (/iP(hone|ad|od)/.test(navigator.platform) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
-  document.documentElement.classList.add('ios');
+// Measure the textarea's built-in text inset: an unwrapped textarea without padding is wider than its text by it
+function measureInset() {
+  const t = document.createElement('textarea'), sp = document.createElement('span');
+  t.wrap = 'off';
+  t.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;width:1px;height:2em;padding:0;border:0;white-space:pre;font:16px Georgia,serif';
+  sp.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;white-space:pre;font:16px Georgia,serif';
+  t.value = sp.textContent = 'mmmmmmmmmmmmmmmmmmmm';
+  document.body.append(t, sp);
+  const d = (t.scrollWidth - sp.getBoundingClientRect().width) / 2;
+  t.remove(); sp.remove();
+  const inset = d >= 1 && d <= 8 ? Math.round(d) : 0;
+  document.documentElement.style.setProperty('--ti', inset + 'px');
+  return inset;
+}
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
   set(k, v) {
@@ -1495,6 +1507,7 @@ window.addEventListener('resize', () => document.querySelectorAll('main textarea
 
 /* ============ Start ============ */
 (async function boot() {
+  measureInset();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
   if (!DROPBOX_APP_KEY) { show('setup'); return; }
   const params = new URLSearchParams(location.search);
