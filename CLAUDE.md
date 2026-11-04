@@ -56,7 +56,7 @@ verse lines
 
 notes
 
-### Other interpretation 1 (hidden)
+### Other interpretation 1: Name (hidden)
 
 optional, any number, with a <mark class="yellow">highlight</mark>
 
@@ -84,8 +84,11 @@ optional, long (pasted from Claude), shown collapsed
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
 - `### My understanding` is always written, even when empty.
 - Other interpretations: any number of `### Other interpretation N` per
-  stanza, in memory `stanza.oths = [{ o, hidden, marks }]`. The UI numbers them
-  only when there's more than one (`otherLabel`). The legacy single
+  stanza, in memory `stanza.oths = [{ o, by?, hidden, marks }]`. `by` is the
+  interpreter's name (the «Name» button), written after a colon in the heading
+  and parsed from the original line so its letter case is kept. The caption is
+  the name if there is one; otherwise the UI numbers them, but only when
+  there's more than one (`otherLabel`). The legacy single
   `### Other interpretations` becomes interpretation 1.
 - Questions: a stanza has any number of `### Question N` sections. N is the
   position, renumbered on removal, and the UI shows «Q<stanza>.<N>».

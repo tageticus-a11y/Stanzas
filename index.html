@@ -326,7 +326,7 @@ Stanza text
 
 ...
 
-### Other interpretation 1 (hidden)
+### Other interpretation 1: Name (hidden)
 
 ...
 
@@ -415,7 +415,7 @@ function serialize(m) {
   const field = (o, k) => escLine(encodeMarks(o[k], o.marks[k]));
   m.stanzas.forEach((s, i) => {
     parts.push('## ' + (i === 0 && s.epigraph ? 'Epigraph' : stanzaNo(m, i)), field(s, 'text'), '### My understanding', field(s, 'und'));
-    s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
+    s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
       if (q.a != null) parts.push('### Answer ' + (j + 1), field(q, 'a'));
@@ -451,7 +451,11 @@ function parseMd(md, fallbackTitle) {
       if (!match) continue;
       const f = match[1];
       if (f === null) buf = null;
-      else if (f === 'o') { const o = { o: [], hidden }; cur.oths.push(o); buf = o.o; }
+      else if (f === 'o') {
+        // "Other interpretation 2: Name": the name keeps its letter case, so take it from the line itself
+        const by = /^[^:]*:\s*(.*?)\s*$/.exec(line.slice(4).trim().replace(/\s*\(hidden\)$/i, ''));
+        const o = { o: [], hidden, by: by ? by[1] : '' }; cur.oths.push(o); buf = o.o;
+      }
       else if (f === 'q') { const q = { q: [], hidden }; cur.qs.push(q); buf = q.q; }
       else if (f === 'a') {
         // "Answer N" belongs to question N; without a number, to the last question
@@ -466,7 +470,11 @@ function parseMd(md, fallbackTitle) {
   const m = { title, marks: {}, stanzas: stanzas.map(s => {
     const out = newStanza();
     setField(out, 'text', s.text); setField(out, 'und', s.und);
-    out.oths = s.oths.map(o => { const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o); return x; });
+    out.oths = s.oths.map(o => {
+      const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o);
+      if (o.by) x.by = o.by;
+      return x;
+    });
     if (s.epigraph) out.epigraph = true;
     out.qs = s.qs.map(q => {
       const o = newQuestion();
@@ -924,6 +932,13 @@ function stanzaEl(s, i) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
     shownOths.forEach(([o, j]) => ex.append(fieldEl(o, 'o', 'f' + i + 'o' + j, otherLabel(s, j), '', [
+      button('Name', '', () => {
+        const v = prompt('Whose interpretation is this? Leave empty to number it instead.', o.by || '');
+        if (v === null) return;
+        const by = v.replace(/\s+/g, ' ').trim();
+        if (by) o.by = by; else delete o.by;
+        changed(); render();
+      }),
       button('Hide', '', () => { o.hidden = true; changed(); render(); }),
       button('Remove', '', () => {
         if (o.o && !confirm('Remove “' + otherLabel(s, j) + '” from ' + name + '? Its text will be deleted.')) return;
@@ -944,7 +959,7 @@ function stanzaEl(s, i) {
     changed(); render();
   }));
   s.oths.forEach((o, j) => {
-    if (o.hidden) a.append(button('Show ' + otherLabel(s, j).toLowerCase(), '', () => {
+    if (o.hidden) a.append(button('Show ' + (o.by || otherLabel(s, j).toLowerCase()), '', () => {
       o.hidden = false; changed(); render(); focusField('f' + i + 'o' + j);
     }));
   });
@@ -982,7 +997,9 @@ function stanzaEl(s, i) {
   a.append(gap, button('Copy for Claude', '', () => {
     const val = (o, k) => encodeMarks(o[k], o.marks[k]);
     let t = '“' + model.title + '”, ' + name + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
-    s.oths.forEach((o, j) => { if (o.o) t += '\n\n' + otherLabel(s, j) + ':\n' + val(o, 'o'); });
+    s.oths.forEach((o, j) => {
+      if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
+    });
     s.qs.forEach((q, j) => {
       const n = no + '.' + (j + 1);
       if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
@@ -994,7 +1011,8 @@ function stanzaEl(s, i) {
   return art;
 }
 
-const otherLabel = (s, j) => 'Other interpretation' + (s.oths.length > 1 ? ' ' + (j + 1) : '');
+// Caption: the interpreter's name if given, otherwise numbered (only when there's more than one)
+const otherLabel = (s, j) => s.oths[j].by || 'Other interpretation' + (s.oths.length > 1 ? ' ' + (j + 1) : '');
 // Question j of stanza i («Q2.1») with its optional answer («A2.1») in one block
 function questionEl(s, i, q, j) {
   const n = stanzaNo(model, i) + '.' + (j + 1);
