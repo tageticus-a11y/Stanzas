@@ -44,6 +44,10 @@ lives in the owner's Dropbox. No server of our own, no build step.
 ```
 # Title
 
+## Title
+
+optional title block (first), with notes like a stanza
+
 ## Epigraph
 
 optional: only the first stanza can be one; the stanzas after it count from 1
@@ -97,21 +101,39 @@ optional, long (pasted from Claude), shown collapsed
   `stanza.qs = [{ q, a?, hidden, marks }]`. The legacy single `### Questions`
   becomes question 1.
 - A ` (hidden)` suffix marks a collapsed interpretation or question.
-- Epigraph: `stanza.epigraph = true`, written as `## Epigraph`, and only
-  honoured on the first stanza. It keeps understanding, columns and questions
-  like any stanza. `stanzaNo()` numbers it «E» (questions «QE.1») and counts
-  the stanzas after it from 1.
+- Title block and epigraph:
+  - **Title block:** `stanza.isTitle`, written as `## Title`; only allowed
+    first.
+  - **Epigraph:** `stanza.epigraph`, written as `## Epigraph`; allowed first,
+    or right after the title block.
+  - **Rules:** `kindOf()` enforces both positions, and both blocks keep
+    understanding, interpretations and questions like any stanza.
+  - **Numbering:** `stanzaNo()` labels them «T» and «E» (questions «QT.1»,
+    «QE.1») and counts ordinary stanzas from 1 after them.
+  - **Content:** the title block's text is separate from `# Title` (which
+    stays the poem/file title); it's prefilled from it when added. «Copy verse»
+    uses it as the title.
 - Poem-level `SECTIONS` come after the last stanza: `## Date`, `## Conclusion`,
   then `## Additional interpretation`. Any other `## ` heading starts a stanza. The
   interpretation shows collapsed whenever a poem opens; that state isn't saved.
 - Summary is gone: `### Summary` / `### Выжимка` sections are dropped when
   read, and a 4th TSV import column is ignored.
-- Highlights are stored inline as `<mark class="COLOR">…</mark>`, COLOR one of
-  `COLORS` (yellow, green, blue, pink, violet); in memory they are ranges
-  `obj.marks[field] = [[start, end, color]]` over the plain text. Backslashes
-  before a literal `<mark`/`</mark>` are escaped (`encodeMarks`/`decodeMarks`).
-  In the UI each field is a transparent textarea over a `.backdrop` that draws
-  the marks; keep their font, padding and border identical.
+- Formatting is stored inline:
+  - **Tags:** `<mark class="COLOR">…</mark>` (COLOR one of `COLORS`: yellow,
+    green, blue, pink, violet), `<i>…</i>` and `<u>…</u>`, nested in that
+    order (`encodeField`, `decodeMarks`).
+  - **In memory:** range lists over the plain text: `obj.marks[field]` for
+    colours, `obj.marks[field + '/i']` and `obj.marks[field + '/u']`
+    (`[[start, end, kind]]`).
+  - **Escaping:** backslashes before a literal `<mark`, `</mark`, `<i>`, `</i>`,
+    `<u>` or `</u>` are escaped.
+  - **Rendering:** each field is a textarea with transparent text over a
+    `.backdrop` that draws the visible text with its formatting. Keep their
+    font, padding and border identical.
+  - **Italic must not change letter widths,** or the caret drifts from the
+    drawn text. That's why no italic font face is loaded: the italic is
+    synthesised from the regular face. Don't add `ital` back to the Google
+    Fonts URL.
 - Legacy files use Russian headings (`### Моё понимание`) and must keep
   parsing (`HEADINGS`); files are re-saved with English headings.
 - Import (`parseImport`) accepts TSV copied from Google Sheets (columns
@@ -132,12 +154,15 @@ optional, long (pasted from Claude), shown collapsed
   setups. It is a collapsible folder tree with search; open folders are
   remembered per device in `st.open`. Touch devices (iPhone) keep the native
   picker.
-- The highlight palette sits in the sticky top bar on fine-pointer devices, and
+- The format palette (5 colours, I, U, Clear; Ctrl/Cmd+I and +U on PC) sits in the sticky top bar on fine-pointer devices, and
   on its own row under the focused field's label on touch.
 - Each stanza's «+ Add» select has two groups:
   - This stanza: Question, Other interpretation.
-  - New stanza: Stanza above (not on an epigraph), Stanza below, and on the
-    first stanza Epigraph above.
+  - New stanza:
+    - Stanza above: not on a title block or epigraph.
+    - Stanza below: not on a title block that has an epigraph after it.
+    - Epigraph above: on the first ordinary stanza, if there's no epigraph.
+    - Title above: on the first block, if there's no title block.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
   - «Copy all for Claude»: `serialize` without the additional interpretation.

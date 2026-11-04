@@ -15,7 +15,7 @@
 <title>Stanzas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
 <style>
   /* Winter evening: bluish-grey paper, gaslight amber as the only accent */
   :root {
@@ -102,12 +102,16 @@
     background: transparent; border-color: transparent; padding-left: 0; }
   textarea.verse:focus { border-color: var(--rule); padding-left: 10px; }
 
-  /* Highlights: a backdrop with the same text and <mark>s sits behind a transparent textarea */
+  /* Formatting: the textarea's text is transparent; a backdrop behind it draws the same text with highlights,
+     italics and underlines. Italic is synthesised (no italic font is loaded), so letters keep their widths
+     and the caret stays on the text. */
   .hl { position: relative; border-radius: 6px; background: var(--surface); }
   .hl.verse { background: transparent; }
   .hl.verse:focus-within { background: var(--surface); }
-  .hl textarea { position: relative; background: transparent; }
-  .backdrop { position: absolute; inset: 0; border: 1px solid transparent; padding: 8px 10px; color: transparent;
+  .hl textarea { position: relative; background: transparent; color: transparent; caret-color: var(--ink); }
+  .hl textarea::placeholder { color: var(--muted); }
+  .hl textarea::selection { background: rgba(80, 140, 255, .32); color: transparent; }
+  .backdrop { position: absolute; inset: 0; border: 1px solid transparent; padding: 8px 10px; color: var(--ink);
     white-space: pre-wrap; overflow-wrap: break-word; overflow: hidden; pointer-events: none; }
   .hl.verse .backdrop { font: 1.08rem/1.65 'PT Serif', Georgia, serif; padding-left: 0; }
   .hl.verse:focus-within .backdrop { padding-left: 10px; }
@@ -115,7 +119,9 @@
   .ios .backdrop { padding-left: 13px; padding-right: 13px; }
   .ios .hl.verse .backdrop { padding-left: 3px; }
   .ios .hl.verse:focus-within .backdrop { padding-left: 13px; }
-  .backdrop mark { color: transparent; border-radius: 3px; }
+  .backdrop mark { color: inherit; border-radius: 3px; }
+  .backdrop .it { font-style: italic; }
+  .backdrop .ul { text-decoration: underline; text-underline-offset: 2px; }
   .hl-yellow { background: var(--hl-yellow); } .hl-green { background: var(--hl-green); }
   .hl-blue { background: var(--hl-blue); } .hl-pink { background: var(--hl-pink); }
   .hl-violet { background: var(--hl-violet); }
@@ -123,12 +129,17 @@
   /* touch: next to a field, on its own row under the label and buttons */
   .fhead #palette { order: 1; flex-basis: 100%; margin: 4px 0; }
   #palette .sw { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--rule); background: var(--c); }
+  #palette .fmt { width: 24px; height: 22px; padding: 0; font: 700 .85rem 'PT Serif', Georgia, serif; }
+  #palette .fmt-i { font-style: italic; }
+  #palette .fmt-u { text-decoration: underline; }
   #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
 
   #date, #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
   #date:empty, #final:empty, #interp:empty { display: none; }
   /* Epigraph: italic (the backdrop must match the textarea for highlights to line up) */
   textarea.epi, .hl.epi .backdrop { font-style: italic; }
+  /* Title block: bold (same rule for both layers) */
+  textarea.ttl, .hl.ttl .backdrop { font-weight: 700; }
   /* A long field cut by grow(): fade out the last lines */
   .hl.clamped::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 3em;
     border-radius: 0 0 6px 6px; background: linear-gradient(transparent, var(--surface)); pointer-events: none; }
@@ -235,7 +246,9 @@
   <button type="button" class="sw" data-c="blue" style="--c: var(--hl-blue)" aria-label="Highlight blue" title="Blue"></button>
   <button type="button" class="sw" data-c="pink" style="--c: var(--hl-pink)" aria-label="Highlight pink" title="Pink"></button>
   <button type="button" class="sw" data-c="violet" style="--c: var(--hl-violet)" aria-label="Highlight violet" title="Violet"></button>
-  <button type="button" class="clear" data-c="">Clear</button>
+  <button type="button" class="fmt fmt-i" data-f="i" aria-label="Italic" title="Italic (Ctrl+I)">I</button>
+  <button type="button" class="fmt fmt-u" data-f="u" aria-label="Underline" title="Underline (Ctrl+U)">U</button>
+  <button type="button" class="clear" data-f="clear" title="Remove color, italic and underline">Clear</button>
 </div>
 
 <dialog id="newDialog">
@@ -358,13 +371,27 @@ optional poem-level SECTIONS come after the last stanza. Older files use Russian
 headings («Моё понимание») and a single "### Questions"; both still parse.
 Summary sections («Выжимка») are no longer used and are dropped when read.
 
-Highlights are stored inline: <mark class="yellow">…</mark>. A literal "<mark"
-or "</mark" typed by the user gets its preceding backslashes doubled plus one;
-backslashes right before a real tag are doubled (encodeMarks/decodeMarks).
+Formatting is stored inline: <mark class="yellow">…</mark>, <i>…</i>, <u>…</u>,
+nested in that order. A literal "<mark", "</mark", "<i>", "</i>", "<u>" or "</u>"
+typed by the user gets its preceding backslashes doubled plus one; backslashes
+right before a real tag are doubled (encodeField/decodeMarks). In memory each
+field k has range lists marks[k] (colors), marks[k + '/i'], marks[k + '/u'].
 */
 const SECTIONS = [['date', 'Date'], ['final', 'Conclusion'], ['interp', 'Additional interpretation']];
-// The first stanza may be an epigraph («## Epigraph»): it's shown as «E» and the stanzas after it count from 1
-const stanzaNo = (m, i) => m.stanzas[0] && m.stanzas[0].epigraph ? (i === 0 ? 'E' : String(i)) : String(i + 1);
+// The first blocks may be a title («## Title», only first) and an epigraph («## Epigraph», first or right
+// after the title). They're labelled «T» and «E»; the stanzas after them count from 1.
+function kindOf(m, i) {
+  const s = m.stanzas[i];
+  if (!s) return null;
+  if (i === 0 && s.isTitle) return 'title';
+  if (s.epigraph && !s.isTitle && (i === 0 || (i === 1 && m.stanzas[0].isTitle))) return 'epigraph';
+  return null;
+}
+const specials = m => (kindOf(m, 0) ? 1 : 0) + (kindOf(m, 1) ? 1 : 0);
+function stanzaNo(m, i) {
+  const k = kindOf(m, i);
+  return k === 'title' ? 'T' : k === 'epigraph' ? 'E' : String(i - specials(m) + 1);
+}
 // ### heading → field; null drops the section's lines
 const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'o'], [/^question/, 'q'], [/^answer/, 'a'],
   [/^(summary|выжим)/, null]];
@@ -373,36 +400,74 @@ const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 const escLine = s => s.replace(/^(\\*#)/gm, '\\$1');
 const unescLine = s => s.replace(/^\\(\\*#)/, '$1');
 
-// ranges: sorted, non-overlapping [start, end, color] over the plain text
-function encodeMarks(text, ranges) {
-  const seg = (s, beforeTag) => {
-    s = s.replace(/(\\*)(<\/?mark)/g, (_, b, t) => b + b + '\\' + t);
-    return beforeTag ? s.replace(/\\+$/, b => b + b) : s;
-  };
-  let out = '', pos = 0;
-  for (const [a, b, c] of ranges || []) {
-    out += seg(text.slice(pos, a), true) + '<mark class="' + c + '">' + seg(text.slice(a, b), true) + '</mark>';
-    pos = b;
+// Runs of equal style over obj[k]: [{ a, b, c, i, u }], from the range lists marks[k], marks[k + '/i'],
+// marks[k + '/u'] (each sorted and non-overlapping: [start, end, color | 'i' | 'u'])
+function runs(o, k) {
+  const text = o[k], lists = [o.marks[k], o.marks[k + '/i'], o.marks[k + '/u']].map(l => l || []);
+  const cuts = new Set([0, text.length]);
+  lists.forEach(l => l.forEach(([a, b]) => { cuts.add(a); cuts.add(b); }));
+  const pts = [...cuts].filter(x => x >= 0 && x <= text.length).sort((x, y) => x - y), out = [];
+  for (let n = 0; n < pts.length - 1; n++) {
+    const a = pts[n], b = pts[n + 1], at = l => l.find(r => r[0] <= a && b <= r[1]);
+    const c = at(lists[0]), run = { a, b, c: c ? c[2] : null, i: !!at(lists[1]), u: !!at(lists[2]) };
+    const last = out[out.length - 1];
+    if (last && last.c === run.c && last.i === run.i && last.u === run.u) last.b = b; else out.push(run);
   }
-  return out + seg(text.slice(pos), false);
+  return out;
+}
+const TAG_RE = /(\\*)(<\/?mark|<\/?[iu]>)/g;
+// obj[k] with its formatting as text with <mark>, <i>, <u> tags (for the file and for Claude)
+function encodeField(o, k) {
+  const text = o[k], parts = [];   // { s, tag }
+  let open = [];                    // open tags, outermost first: 'mark:yellow', 'i', 'u'
+  const shut = t => '</' + (t.startsWith('mark') ? 'mark' : t) + '>';
+  const begin = t => t.startsWith('mark') ? '<mark class="' + t.slice(5) + '">' : '<' + t + '>';
+  for (const r of runs(o, k)) {
+    const want = [r.c && 'mark:' + r.c, r.i && 'i', r.u && 'u'].filter(Boolean);
+    let same = 0;
+    while (same < open.length && same < want.length && open[same] === want[same]) same++;
+    for (let x = open.length - 1; x >= same; x--) parts.push({ s: shut(open[x]), tag: true });
+    for (let x = same; x < want.length; x++) parts.push({ s: begin(want[x]), tag: true });
+    open = want;
+    parts.push({ s: text.slice(r.a, r.b).replace(TAG_RE, (_, b, t) => b + b + '\\' + t) });
+  }
+  for (let x = open.length - 1; x >= 0; x--) parts.push({ s: shut(open[x]), tag: true });
+  // backslashes right before a real tag are doubled, so they can't escape it
+  return parts.map((p, n) => !p.tag && parts[n + 1] && parts[n + 1].tag ? p.s.replace(/\\+$/, b => b + b) : p.s).join('');
 }
 function decodeMarks(raw) {
-  const re = /(\\*)(<\/?mark)/g, ranges = [];
-  let text = '', last = 0, open = null, m;
+  const re = new RegExp(TAG_RE.source, 'g'), ranges = [], ital = [], under = [];
+  let text = '', last = 0, open = null, oi = null, ou = null, m;
   while ((m = re.exec(raw))) {
     const k = m[1].length;
     text += raw.slice(last, m.index) + '\\'.repeat(k >> 1);
     const rest = raw.slice(m.index + k);
-    const tag = k % 2 ? null : (/^<mark class="([a-z]+)">/.exec(rest) || /^<\/mark>/.exec(rest));
-    if (tag && tag[1] && COLORS.includes(tag[1]) && !open) open = { a: text.length, c: tag[1] };
-    else if (tag && !tag[1] && open) { if (text.length > open.a) ranges.push([open.a, text.length, open.c]); open = null; }
+    const tag = k % 2 ? null : (/^<mark class="([a-z]+)">/.exec(rest) || /^<\/mark>|^<\/?[iu]>/.exec(rest));
+    const t = tag && tag[0], n = text.length;
+    if (t && tag[1] && COLORS.includes(tag[1]) && !open) open = { a: n, c: tag[1] };
+    else if (t === '</mark>' && open) { if (n > open.a) ranges.push([open.a, n, open.c]); open = null; }
+    else if (t === '<i>' && oi === null) oi = n;
+    else if (t === '</i>' && oi !== null) { if (n > oi) ital.push([oi, n, 'i']); oi = null; }
+    else if (t === '<u>' && ou === null) ou = n;
+    else if (t === '</u>' && ou !== null) { if (n > ou) under.push([ou, n, 'u']); ou = null; }
     else { text += m[2]; last = re.lastIndex; continue; }
-    last = re.lastIndex = m.index + k + tag[0].length;
+    last = re.lastIndex = m.index + k + t.length;
   }
   text += raw.slice(last);
-  if (open && text.length > open.a) ranges.push([open.a, text.length, open.c]);
-  return { text, ranges };
+  const n = text.length;
+  if (open && n > open.a) ranges.push([open.a, n, open.c]);
+  if (oi !== null && n > oi) ital.push([oi, n, 'i']);
+  if (ou !== null && n > ou) under.push([ou, n, 'u']);
+  return { text, ranges, ital, under };
 }
+// Join touching ranges of the same style (a tag split by nesting comes back in pieces)
+const mergeRanges = rs => rs.reduce((out, r) => {
+  const l = out[out.length - 1];
+  if (l && l[1] === r[0] && l[2] === r[2]) l[1] = r[1]; else out.push([...r]);
+  return out;
+}, []);
+// Forget a field's formatting (when the field is removed)
+function dropMarks(o, k) { delete o.marks[k]; delete o.marks[k + '/i']; delete o.marks[k + '/u']; }
 
 // oths: [{ o, hidden, marks }], qs: [{ q, a?, hidden, marks }]: each carries its own highlights,
 // so fieldEl works on it
@@ -412,9 +477,11 @@ const newQuestion = () => ({ q: '', hidden: false, marks: {} });
 
 function serialize(m) {
   const parts = ['# ' + m.title.replace(/\n/g, ' ')];
-  const field = (o, k) => escLine(encodeMarks(o[k], o.marks[k]));
+  const field = (o, k) => escLine(encodeField(o, k));
   m.stanzas.forEach((s, i) => {
-    parts.push('## ' + (i === 0 && s.epigraph ? 'Epigraph' : stanzaNo(m, i)), field(s, 'text'), '### My understanding', field(s, 'und'));
+    const kind = kindOf(m, i);
+    parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)),
+      field(s, 'text'), '### My understanding', field(s, 'und'));
     s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
@@ -428,7 +495,9 @@ function serialize(m) {
 function setField(o, k, lines) {
   const d = decodeMarks(trimBlank(lines.join('\n')));
   o[k] = d.text;
-  if (d.ranges.length) o.marks[k] = d.ranges;
+  if (d.ranges.length) o.marks[k] = mergeRanges(d.ranges);
+  if (d.ital.length) o.marks[k + '/i'] = mergeRanges(d.ital);
+  if (d.under.length) o.marks[k + '/u'] = mergeRanges(d.under);
 }
 function parseMd(md, fallbackTitle) {
   let title = fallbackTitle, cur = null, buf = null, started = false;   // buf: where content lines go
@@ -440,7 +509,8 @@ function parseMd(md, fallbackTitle) {
       const h = line.slice(3).trim().toLowerCase();
       const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
       if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
-      cur = { text: [], und: [], oths: [], qs: [], epigraph: h === 'epigraph' && !stanzas.length };
+      cur = { text: [], und: [], oths: [], qs: [], isTitle: h === 'title' && !stanzas.length,
+        epigraph: h === 'epigraph' && (!stanzas.length || (stanzas.length === 1 && stanzas[0].isTitle)) };
       stanzas.push(cur); buf = cur.text; continue;
     }
     if (cur && /^### /.test(line)) {
@@ -475,6 +545,7 @@ function parseMd(md, fallbackTitle) {
       if (o.by) x.by = o.by;
       return x;
     });
+    if (s.isTitle) out.isTitle = true;
     if (s.epigraph) out.epigraph = true;
     out.qs = s.qs.map(q => {
       const o = newQuestion();
@@ -830,7 +901,7 @@ function interpEl() {
   toggle.setAttribute('aria-expanded', String(interpOpen));
   const remove = button('Remove', '', () => {
     if (model.interp && !confirm('Remove the additional interpretation? Its text will be deleted.')) return;
-    delete model.interp; delete model.marks.interp; changed(); render();
+    delete model.interp; dropMarks(model, 'interp'); changed(); render();
   });
   if (interpOpen) {
     const el = fieldEl(model, 'interp', 'finterp', label, '', [remove]);
@@ -857,7 +928,7 @@ function render() {
   else list.append(emptyEl('No stanzas yet. Add the first one below.'));
   const removeSection = (k, what) => button('Remove', '', () => {
     if (model[k] && !confirm('Remove the ' + what + '? Its text will be deleted.')) return;
-    delete model[k]; delete model.marks[k]; changed(); render();
+    delete model[k]; dropMarks(model, k); changed(); render();
   });
   const date = $('#date');
   date.innerHTML = '';
@@ -910,7 +981,7 @@ function fieldEl(obj, key, id, label, cls, tools, collapsible) {
   t._f = { obj, key, bd }; t._prev = t.value;
   paintBackdrop(t);
   t.addEventListener('input', () => {
-    if (obj.marks[key]) obj.marks[key] = shiftMarks(obj.marks[key], t._prev, t.value);
+    for (const k of [key, key + '/i', key + '/u']) if (obj.marks[k]) obj.marks[k] = shiftMarks(obj.marks[k], t._prev, t.value);
     obj[key] = t._prev = t.value;
     paintBackdrop(t); grow(t); changed();
   });
@@ -918,13 +989,17 @@ function fieldEl(obj, key, id, label, cls, tools, collapsible) {
   return wrap;
 }
 function stanzaEl(s, i) {
-  const epi = i === 0 && !!s.epigraph, no = stanzaNo(model, i), name = epi ? 'the epigraph' : 'stanza ' + no;
-  const art = document.createElement('article'); art.className = 'stanza' + (epi ? ' epigraph' : '');
-  const num = document.createElement('div'); num.className = 'num'; num.textContent = epi ? '' : no;
+  const kind = kindOf(model, i), epi = kind === 'epigraph', no = stanzaNo(model, i);
+  const name = kind === 'title' ? 'the title' : epi ? 'the epigraph' : 'stanza ' + no;
+  const first = specials(model);   // index of the first ordinary stanza
+  const hasEpigraph = kindOf(model, 0) === 'epigraph' || kindOf(model, 1) === 'epigraph';
+  const art = document.createElement('article'); art.className = 'stanza' + (kind ? ' ' + kind : '');
+  const num = document.createElement('div'); num.className = 'num'; num.textContent = kind ? '' : no;
   const f = document.createElement('div'); f.className = 'fields';
   const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '');
   if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
-  f.append(fieldEl(s, 'text', 'f' + i + 'text', epi ? 'Epigraph' : 'Text', epi ? 'verse epi' : 'verse'), und);
+  f.append(fieldEl(s, 'text', 'f' + i + 'text', kind === 'title' ? 'Title' : epi ? 'Epigraph' : 'Text',
+    kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse'), und);
 
   const shownOths = s.oths.map((o, j) => [o, j]).filter(([o]) => !o.hidden);
   const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
@@ -950,11 +1025,11 @@ function stanzaEl(s, i) {
   }
 
   const a = document.createElement('div'); a.className = 'actions';
-  a.append(button(epi ? 'Delete epigraph' : 'Delete stanza', 'quiet', () => {
+  a.append(button(kind === 'title' ? 'Delete title' : epi ? 'Delete epigraph' : 'Delete stanza', 'quiet', () => {
     if (!confirm('Delete ' + name + ' with its notes?')) return;
     model.stanzas.splice(i, 1); changed(); render();
   }));
-  if (i === 0) a.append(button(epi ? 'Not an epigraph' : 'Mark as epigraph', '', () => {
+  if (epi || (!kind && i === first && !hasEpigraph)) a.append(button(epi ? 'Not an epigraph' : 'Mark as epigraph', '', () => {
     if (epi) delete s.epigraph; else s.epigraph = true;
     changed(); render();
   }));
@@ -973,20 +1048,25 @@ function stanzaEl(s, i) {
   add.setAttribute('aria-label', 'Add to ' + name);
   const opt = (parent, v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; parent.append(o); };
   opt(add, '', '+ Add');
-  const cols = document.createElement('optgroup'); cols.label = epi ? 'This epigraph' : 'This stanza';
+  const cols = document.createElement('optgroup'); cols.label = kind === 'title' ? 'This title' : epi ? 'This epigraph' : 'This stanza';
   opt(cols, 'q', 'Question'); opt(cols, 'o', 'Other interpretation');
   const st = document.createElement('optgroup'); st.label = 'New stanza';
-  if (!epi) opt(st, 'above', 'Stanza above');   // nothing can go above an epigraph
-  opt(st, 'below', 'Stanza below');
-  if (i === 0 && !epi) opt(st, 'epigraph', 'Epigraph above');
-  add.append(cols, st);
+  // ordinary stanzas can't go above a title or epigraph, or between them
+  if (!kind) opt(st, 'above', 'Stanza above');
+  if (!(kind === 'title' && hasEpigraph)) opt(st, 'below', 'Stanza below');
+  if (!kind && i === first && !hasEpigraph) opt(st, 'epigraph', 'Epigraph above');
+  if (i === 0 && kind !== 'title') opt(st, 'title', 'Title above');
+  add.append(cols);
+  if (st.children.length) add.append(st);
   add.addEventListener('change', () => {
     const v = add.value;
     if (v === 'q') addQuestion(s, i);
     else if (v === 'o') { s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
-    else if (v === 'above' || v === 'below' || v === 'epigraph') {
-      const at = v === 'below' ? i + 1 : i, ns = newStanza();
+    else if (v === 'above' || v === 'below' || v === 'epigraph' || v === 'title') {
+      const at = v === 'below' ? i + 1 : v === 'title' ? 0 : i;
+      const ns = newStanza(v === 'title' ? model.title : '');
       if (v === 'epigraph') ns.epigraph = true;
+      if (v === 'title') ns.isTitle = true;
       model.stanzas.splice(at, 0, ns);
       expanded.clear();   // field ids move with the stanzas
       changed(); render(); focusField('f' + at + 'text');
@@ -995,7 +1075,7 @@ function stanzaEl(s, i) {
   a.append(add);
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
-    const val = (o, k) => encodeMarks(o[k], o.marks[k]);
+    const val = (o, k) => encodeField(o, k);
     let t = '“' + model.title + '”, ' + name + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
     s.oths.forEach((o, j) => {
       if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
@@ -1028,7 +1108,7 @@ function questionEl(s, i, q, j) {
   box.append(fieldEl(q, 'q', 'f' + i + 'q' + j, 'Q' + n, '', tools, true));
   if (q.a != null) box.append(fieldEl(q, 'a', 'f' + i + 'a' + j, 'A' + n, '', [button('Remove', '', () => {
     if (q.a && !confirm('Remove A' + n + '? Its text will be deleted.')) return;
-    delete q.a; delete q.marks.a; changed(); render();
+    delete q.a; dropMarks(q, 'a'); changed(); render();
   })], true));
   return box;
 }
@@ -1055,13 +1135,18 @@ document.addEventListener('keydown', e => {
 function paintBackdrop(t) {
   const { obj, key, bd } = t._f, text = obj[key];
   bd.textContent = '';
-  let pos = 0;
-  for (const [a, b, c] of obj.marks[key] || []) {
-    const m = document.createElement('mark'); m.className = 'hl-' + c; m.textContent = text.slice(a, b);
-    bd.append(text.slice(pos, a), m);
-    pos = b;
+  for (const r of runs(obj, key)) {
+    const piece = text.slice(r.a, r.b);
+    if (!r.c && !r.i && !r.u) { bd.append(piece); continue; }
+    const el = document.createElement(r.c ? 'mark' : 'span');
+    if (r.c) el.className = 'hl-' + r.c;
+    if (r.i) el.classList.add('it');
+    if (r.u) el.classList.add('ul');
+    el.textContent = piece;
+    bd.append(el);
   }
-  bd.append(text.slice(pos));
+  // a trailing newline needs something after it to take up its line, as it does in the textarea
+  if (text.endsWith('\n')) bd.append(' ');
 }
 // Keep highlights on the same words after an edit: typing inside a highlight extends it, at its edges doesn't
 function shiftMarks(ranges, old, now) {
@@ -1113,20 +1198,41 @@ document.addEventListener('focusout', e => {
   hideTimer = setTimeout(() => { if (!isField(document.activeElement)) palette.hidden = true; }, 400);
 });
 palette.addEventListener('mousedown', e => e.preventDefault());
-palette.addEventListener('click', e => { const b = e.target.closest('button'); if (b) highlight(b.dataset.c || null); });
-function highlight(c) {
+palette.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (b) format(b.dataset.f || b.dataset.c);
+});
+// what: a color, 'i' or 'u' (toggle), or 'clear' (all three). With just a cursor it acts on the
+// formatted stretch the cursor is in. The selection stays, so several formats can be applied in a row.
+function format(what) {
   if (!sel || !sel.t.isConnected) return;
-  const { t } = sel, { obj, key } = t._f, ranges = obj.marks[key] || [];
-  let { a, b } = sel;
-  if (a === b) {   // just a cursor: recolor or clear the highlight it's in
-    const r = ranges.find(r => r[0] <= a && a <= r[1]);
-    if (!r) { toast('Select some text first, then pick a color.'); return; }
-    [a, b] = r;
-  }
-  obj.marks[key] = paint(ranges, a, b, c);
+  const { t } = sel, { obj, key } = t._f, { a, b } = sel;
+  const kinds = what === 'clear' ? ['c', 'i', 'u'] : what === 'i' || what === 'u' ? [what] : ['c'];
+  const listKey = kd => kd === 'c' ? key : key + '/' + kd;
+  const get = kd => obj.marks[listKey(kd)] || [];
+  const set = (kd, l) => { if (l.length) obj.marks[listKey(kd)] = l; else delete obj.marks[listKey(kd)]; };
+  if (a === b) {
+    // the stretch of each format the cursor is in
+    const around = kinds.map(kd => [kd, get(kd).find(r => r[0] <= a && a <= r[1])]).filter(([, r]) => r);
+    if (!around.length) { toast('Select some text first, then pick a format.'); return; }
+    if (what === 'clear' || what === 'i' || what === 'u') around.forEach(([kd, r]) => set(kd, paint(get(kd), r[0], r[1], null)));
+    else { const r = around[0][1]; set('c', paint(get('c'), r[0], r[1], what)); }   // recolor
+  } else if (what === 'clear') kinds.forEach(kd => set(kd, paint(get(kd), a, b, null)));
+  else if (what === 'i' || what === 'u') {
+    // toggle: if the whole selection already has it, remove it
+    const l = get(what), covered = l.reduce((sum, r) => sum + Math.max(0, Math.min(b, r[1]) - Math.max(a, r[0])), 0) === b - a;
+    set(what, paint(l, a, b, covered ? null : what));
+  } else set('c', paint(get('c'), a, b, what));
   paintBackdrop(t); changed();
-  t.focus({ preventScroll: true }); t.setSelectionRange(b, b);
+  t.focus({ preventScroll: true }); t.setSelectionRange(a, b);
 }
+document.addEventListener('keydown', e => {
+  if (!isField(e.target) || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k !== 'i' && k !== 'u') return;
+  e.preventDefault();
+  track(); format(k);
+});
 
 function copy(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -1299,10 +1405,12 @@ $('#copyAll').addEventListener('click', () => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
   copy(serialize({ ...model, interp: undefined }));   // without the additional interpretation
 });
-// Just the poem: title, stanzas (the epigraph first) and date, without notes or highlights
+// Just the poem: title (from the title block if there is one), stanzas (the epigraph first) and date,
+// without notes or formatting
 $('#copyVerse').addEventListener('click', () => {
   if (!model || !model.stanzas.some(s => s.text.trim())) { toast('Nothing to copy: the poem has no text yet.', true); return; }
-  copy([model.title, ...model.stanzas.map(s => s.text).filter(t => t.trim()), ...(model.date ? [model.date] : [])].join('\n\n'));
+  const titled = kindOf(model, 0) === 'title', body = model.stanzas.slice(titled ? 1 : 0).map(s => s.text).filter(t => t.trim());
+  copy([titled ? model.stanzas[0].text : model.title, ...body, ...(model.date ? [model.date] : [])].join('\n\n'));
 });
 $('#addDate').addEventListener('click', () => {
   if (!model) return;
