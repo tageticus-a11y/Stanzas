@@ -56,9 +56,9 @@ verse lines
 
 notes
 
-### Other interpretations (hidden)
+### Other interpretation 1 (hidden)
 
-optional column with a <mark class="yellow">highlight</mark>
+optional, any number, with a <mark class="yellow">highlight</mark>
 
 ### Question 1
 
@@ -83,14 +83,17 @@ optional, long (pasted from Claude), shown collapsed
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
 - `### My understanding` is always written, even when empty.
-  `### Other interpretations` (`EXTRAS`) is optional per stanza.
+- Other interpretations: any number of `### Other interpretation N` per
+  stanza, in memory `stanza.oths = [{ o, hidden, marks }]`. The UI numbers them
+  only when there's more than one (`otherLabel`). The legacy single
+  `### Other interpretations` becomes interpretation 1.
 - Questions: a stanza has any number of `### Question N` sections. N is the
   position, renumbered on removal, and the UI shows «Q<stanza>.<N>».
   `### Answer N` (at most one per question) belongs to question N; an answer
   without a number goes to the last question. In memory:
   `stanza.qs = [{ q, a?, hidden, marks }]`. The legacy single `### Questions`
   becomes question 1.
-- A ` (hidden)` suffix marks a collapsed column or question.
+- A ` (hidden)` suffix marks a collapsed interpretation or question.
 - Epigraph: `stanza.epigraph = true`, written as `## Epigraph`, and only
   honoured on the first stanza. It keeps understanding, columns and questions
   like any stanza. `stanzaNo()` numbers it «E» (questions «QE.1») and counts
@@ -128,6 +131,10 @@ optional, long (pasted from Claude), shown collapsed
   picker.
 - The highlight palette sits in the sticky top bar on fine-pointer devices, and
   on its own row under the focused field's label on touch.
+- Each stanza's «+ Add» select has two groups:
+  - This stanza: Question, Other interpretation.
+  - New stanza: Stanza above (not on an epigraph), Stanza below, and on the
+    first stanza Epigraph above.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
   - «Copy all for Claude»: `serialize` without the additional interpretation.

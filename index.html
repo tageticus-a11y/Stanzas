@@ -326,7 +326,7 @@ Stanza text
 
 ...
 
-### Other interpretations (hidden)
+### Other interpretation 1 (hidden)
 
 ...
 
@@ -350,9 +350,10 @@ Stanza text
 
 ...
 
-"My understanding" is always written. "Other interpretations" is optional per
-stanza; " (hidden)" marks a collapsed column or question. Questions are numbered
-by position (shown as Q<stanza>.<n>); "Answer N" belongs to question N. The
+"My understanding" is always written. A stanza can have any number of other
+interpretations and questions, numbered by position; " (hidden)" marks a
+collapsed one. Questions show as Q<stanza>.<n>; "Answer N" belongs to question N.
+The old single "### Other interpretations" reads as interpretation 1. The
 optional poem-level SECTIONS come after the last stanza. Older files use Russian
 headings («Моё понимание») and a single "### Questions"; both still parse.
 Summary sections («Выжимка») are no longer used and are dropped when read.
@@ -361,12 +362,11 @@ Highlights are stored inline: <mark class="yellow">…</mark>. A literal "<mark"
 or "</mark" typed by the user gets its preceding backslashes doubled plus one;
 backslashes right before a real tag are doubled (encodeMarks/decodeMarks).
 */
-const EXTRAS = [['oth', 'Other interpretations']];
 const SECTIONS = [['date', 'Date'], ['final', 'Conclusion'], ['interp', 'Additional interpretation']];
 // The first stanza may be an epigraph («## Epigraph»): it's shown as «E» and the stanzas after it count from 1
 const stanzaNo = (m, i) => m.stanzas[0] && m.stanzas[0].epigraph ? (i === 0 ? 'E' : String(i)) : String(i + 1);
 // ### heading → field; null drops the section's lines
-const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'oth'], [/^question/, 'q'], [/^answer/, 'a'],
+const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'o'], [/^question/, 'q'], [/^answer/, 'a'],
   [/^(summary|выжим)/, null]];
 const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 
@@ -404,8 +404,10 @@ function decodeMarks(raw) {
   return { text, ranges };
 }
 
-// qs: [{ q, a?, hidden, marks }]: each question carries its own highlights, so fieldEl works on it
-const newStanza = (text, und) => ({ text: text || '', und: und || '', hidden: [], marks: {}, qs: [] });
+// oths: [{ o, hidden, marks }], qs: [{ q, a?, hidden, marks }]: each carries its own highlights,
+// so fieldEl works on it
+const newStanza = (text, und) => ({ text: text || '', und: und || '', marks: {}, oths: [], qs: [] });
+const newOther = () => ({ o: '', hidden: false, marks: {} });
 const newQuestion = () => ({ q: '', hidden: false, marks: {} });
 
 function serialize(m) {
@@ -413,9 +415,7 @@ function serialize(m) {
   const field = (o, k) => escLine(encodeMarks(o[k], o.marks[k]));
   m.stanzas.forEach((s, i) => {
     parts.push('## ' + (i === 0 && s.epigraph ? 'Epigraph' : stanzaNo(m, i)), field(s, 'text'), '### My understanding', field(s, 'und'));
-    EXTRAS.forEach(([k, label]) => {
-      if (s[k] != null) parts.push('### ' + label + (s.hidden.includes(k) ? ' (hidden)' : ''), field(s, k));
-    });
+    s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
       if (q.a != null) parts.push('### Answer ' + (j + 1), field(q, 'a'));
@@ -440,7 +440,7 @@ function parseMd(md, fallbackTitle) {
       const h = line.slice(3).trim().toLowerCase();
       const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
       if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
-      cur = { text: [], und: [], hidden: [], qs: [], epigraph: h === 'epigraph' && !stanzas.length };
+      cur = { text: [], und: [], oths: [], qs: [], epigraph: h === 'epigraph' && !stanzas.length };
       stanzas.push(cur); buf = cur.text; continue;
     }
     if (cur && /^### /.test(line)) {
@@ -451,24 +451,22 @@ function parseMd(md, fallbackTitle) {
       if (!match) continue;
       const f = match[1];
       if (f === null) buf = null;
+      else if (f === 'o') { const o = { o: [], hidden }; cur.oths.push(o); buf = o.o; }
       else if (f === 'q') { const q = { q: [], hidden }; cur.qs.push(q); buf = q.q; }
       else if (f === 'a') {
         // "Answer N" belongs to question N; without a number, to the last question
         let q = cur.qs[parseInt(h.replace(/^\D+/, ''), 10) - 1] || cur.qs[cur.qs.length - 1];
         if (!q) { q = { q: [], hidden: false }; cur.qs.push(q); }
         buf = q.a = [];
-      } else {
-        buf = cur[f] = cur[f] || [];
-        if (hidden && f !== 'und' && !cur.hidden.includes(f)) cur.hidden.push(f);
-      }
+      } else buf = cur[f];   // "My understanding"
       continue;
     }
     if (buf) buf.push(unescLine(line));
   }
   const m = { title, marks: {}, stanzas: stanzas.map(s => {
     const out = newStanza();
-    ['text', 'und', ...EXTRAS.map(([k]) => k)].forEach(k => { if (s[k]) setField(out, k, s[k]); });
-    out.hidden = s.hidden.filter(k => out[k] != null);
+    setField(out, 'text', s.text); setField(out, 'und', s.und);
+    out.oths = s.oths.map(o => { const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o); return x; });
     if (s.epigraph) out.epigraph = true;
     out.qs = s.qs.map(q => {
       const o = newQuestion();
@@ -920,16 +918,16 @@ function stanzaEl(s, i) {
   if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
   f.append(fieldEl(s, 'text', 'f' + i + 'text', epi ? 'Epigraph' : 'Text', epi ? 'verse epi' : 'verse'), und);
 
-  const shown = EXTRAS.filter(([k]) => s[k] != null && !s.hidden.includes(k));
+  const shownOths = s.oths.map((o, j) => [o, j]).filter(([o]) => !o.hidden);
   const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
-  if (shown.length || shownQs.length) {
+  if (shownOths.length || shownQs.length) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
-    shown.forEach(([k, label]) => ex.append(fieldEl(s, k, 'f' + i + k, label, '', [
-      button('Hide', '', () => { s.hidden.push(k); changed(); render(); }),
+    shownOths.forEach(([o, j]) => ex.append(fieldEl(o, 'o', 'f' + i + 'o' + j, otherLabel(s, j), '', [
+      button('Hide', '', () => { o.hidden = true; changed(); render(); }),
       button('Remove', '', () => {
-        if (s[k] && !confirm('Remove “' + label + '” from ' + name + '? Its text will be deleted.')) return;
-        delete s[k]; delete s.marks[k]; s.hidden = s.hidden.filter(x => x !== k); changed(); render();
+        if (o.o && !confirm('Remove “' + otherLabel(s, j) + '” from ' + name + '? Its text will be deleted.')) return;
+        s.oths.splice(j, 1); changed(); render();
       })
     ], true)));
     shownQs.forEach(([q, j]) => ex.append(questionEl(s, i, q, j)));
@@ -945,9 +943,9 @@ function stanzaEl(s, i) {
     if (epi) delete s.epigraph; else s.epigraph = true;
     changed(); render();
   }));
-  EXTRAS.filter(([k]) => s[k] != null && s.hidden.includes(k)).forEach(([k, label]) => {
-    a.append(button('Show ' + label.toLowerCase(), '', () => {
-      s.hidden = s.hidden.filter(x => x !== k); changed(); render(); focusField('f' + i + k);
+  s.oths.forEach((o, j) => {
+    if (o.hidden) a.append(button('Show ' + otherLabel(s, j).toLowerCase(), '', () => {
+      o.hidden = false; changed(); render(); focusField('f' + i + 'o' + j);
     }));
   });
   s.qs.forEach((q, j) => {
@@ -955,21 +953,36 @@ function stanzaEl(s, i) {
       q.hidden = false; changed(); render(); focusField('f' + i + 'q' + j);
     }));
   });
+  // «+ Add»: columns for this stanza, or a new stanza next to it
   const add = document.createElement('select');
-  add.setAttribute('aria-label', 'Add a column to ' + name);
-  [['', '+ Column'], ['q', 'Question'], ...EXTRAS.filter(([k]) => s[k] == null)].forEach(([k, label]) => {
-    const o = document.createElement('option'); o.value = k; o.textContent = label; add.append(o);
-  });
+  add.setAttribute('aria-label', 'Add to ' + name);
+  const opt = (parent, v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; parent.append(o); };
+  opt(add, '', '+ Add');
+  const cols = document.createElement('optgroup'); cols.label = epi ? 'This epigraph' : 'This stanza';
+  opt(cols, 'q', 'Question'); opt(cols, 'o', 'Other interpretation');
+  const st = document.createElement('optgroup'); st.label = 'New stanza';
+  if (!epi) opt(st, 'above', 'Stanza above');   // nothing can go above an epigraph
+  opt(st, 'below', 'Stanza below');
+  if (i === 0 && !epi) opt(st, 'epigraph', 'Epigraph above');
+  add.append(cols, st);
   add.addEventListener('change', () => {
-    if (add.value === 'q') addQuestion(s, i);
-    else if (add.value) { s[add.value] = ''; changed(); render(); focusField('f' + i + add.value); }
+    const v = add.value;
+    if (v === 'q') addQuestion(s, i);
+    else if (v === 'o') { s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
+    else if (v === 'above' || v === 'below' || v === 'epigraph') {
+      const at = v === 'below' ? i + 1 : i, ns = newStanza();
+      if (v === 'epigraph') ns.epigraph = true;
+      model.stanzas.splice(at, 0, ns);
+      expanded.clear();   // field ids move with the stanzas
+      changed(); render(); focusField('f' + at + 'text');
+    }
   });
   a.append(add);
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
     const val = (o, k) => encodeMarks(o[k], o.marks[k]);
     let t = '“' + model.title + '”, ' + name + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
-    EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + val(s, k); });
+    s.oths.forEach((o, j) => { if (o.o) t += '\n\n' + otherLabel(s, j) + ':\n' + val(o, 'o'); });
     s.qs.forEach((q, j) => {
       const n = no + '.' + (j + 1);
       if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
@@ -981,6 +994,7 @@ function stanzaEl(s, i) {
   return art;
 }
 
+const otherLabel = (s, j) => 'Other interpretation' + (s.oths.length > 1 ? ' ' + (j + 1) : '');
 // Question j of stanza i («Q2.1») with its optional answer («A2.1») in one block
 function questionEl(s, i, q, j) {
   const n = stanzaNo(model, i) + '.' + (j + 1);
