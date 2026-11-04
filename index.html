@@ -125,8 +125,13 @@
   #palette .sw { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--rule); background: var(--c); }
   #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
 
-  #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
-  #final:empty, #interp:empty { display: none; }
+  #date, #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
+  #date:empty, #final:empty, #interp:empty { display: none; }
+  /* Epigraph: italic (the backdrop must match the textarea for highlights to line up) */
+  textarea.epi, .hl.epi .backdrop { font-style: italic; }
+  /* A long field cut by grow(): fade out the last lines */
+  .hl.clamped::after { content: ''; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 3em;
+    border-radius: 0 0 6px 6px; background: linear-gradient(transparent, var(--surface)); pointer-events: none; }
   .fhead button.toggle { flex: 1; text-align: left; font-size: .85rem; padding: 0; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .preview { margin: 0; color: var(--muted); font-size: .92rem; cursor: pointer;
@@ -196,16 +201,19 @@
 <div id="app" hidden>
   <header>
     <select id="poem" aria-label="Poem"></select>
+    <button type="button" id="copyVerse">Copy verse</button>
     <button type="button" id="copyAll">Copy all for Claude</button>
     <button type="button" id="newPoem">New</button>
     <span id="sync" role="status" aria-live="polite"></span>
   </header>
   <main>
     <div id="list"></div>
+    <div id="date"></div>
     <div id="final"></div>
     <div id="interp"></div>
     <div class="foot">
       <button type="button" id="addStanza">Add stanza</button>
+      <button type="button" id="addDate">Add date</button>
       <button type="button" id="addFinal">Add conclusion</button>
       <button type="button" id="addInterp">Add interpretation</button>
       <button type="button" class="quiet" id="logout">Disconnect Dropbox on this device</button>
@@ -281,12 +289,34 @@ function toast(msg, isError) {
 }
 function setStatus(t) { $('#sync').textContent = t; }
 function show(id) { ['setup', 'login', 'app'].forEach(s => { $('#' + s).hidden = s !== id; }); }
-function grow(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+// Fields fit their text. A long question, answer or other interpretation (t._more set) is cut to
+// CLAMP px with a fade and an Expand button, until it's expanded or focused.
+const CLAMP = 200, expanded = new Set();   // ids of long fields the user expanded; cleared when a poem opens
+function grow(t) {
+  t.style.height = 'auto';
+  const full = t.scrollHeight + 2, long = !!t._more && full > CLAMP + 60;
+  const cut = long && !expanded.has(t.id) && document.activeElement !== t;
+  t.style.height = (cut ? CLAMP : full) + 'px';
+  if (cut) t.scrollTop = 0;   // the backdrop with the highlights isn't scrolled
+  if (t._more) {
+    t._more.hidden = !long;
+    t._more.textContent = cut ? 'Expand' : 'Collapse';
+    t.parentNode.classList.toggle('clamped', cut);
+  }
+}
 const trimBlank = s => s.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '').replace(/\s+$/, '');
 const OFFLINE = 'Offline — edits will be saved later';
 
 /* ============ File format ============
 # Title
+
+## Epigraph
+
+Optional; only the first stanza can be one, and the stanzas after it count from 1
+
+### My understanding
+
+...
 
 ## 1
 
@@ -305,6 +335,10 @@ Stanza text
 ...
 
 ### Answer 1
+
+...
+
+## Date
 
 ...
 
@@ -328,7 +362,9 @@ or "</mark" typed by the user gets its preceding backslashes doubled plus one;
 backslashes right before a real tag are doubled (encodeMarks/decodeMarks).
 */
 const EXTRAS = [['oth', 'Other interpretations']];
-const SECTIONS = [['final', 'Conclusion'], ['interp', 'Additional interpretation']];
+const SECTIONS = [['date', 'Date'], ['final', 'Conclusion'], ['interp', 'Additional interpretation']];
+// The first stanza may be an epigraph («## Epigraph»): it's shown as «E» and the stanzas after it count from 1
+const stanzaNo = (m, i) => m.stanzas[0] && m.stanzas[0].epigraph ? (i === 0 ? 'E' : String(i)) : String(i + 1);
 // ### heading → field; null drops the section's lines
 const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'oth'], [/^question/, 'q'], [/^answer/, 'a'],
   [/^(summary|выжим)/, null]];
@@ -376,7 +412,7 @@ function serialize(m) {
   const parts = ['# ' + m.title.replace(/\n/g, ' ')];
   const field = (o, k) => escLine(encodeMarks(o[k], o.marks[k]));
   m.stanzas.forEach((s, i) => {
-    parts.push('## ' + (i + 1), field(s, 'text'), '### My understanding', field(s, 'und'));
+    parts.push('## ' + (i === 0 && s.epigraph ? 'Epigraph' : stanzaNo(m, i)), field(s, 'text'), '### My understanding', field(s, 'und'));
     EXTRAS.forEach(([k, label]) => {
       if (s[k] != null) parts.push('### ' + label + (s.hidden.includes(k) ? ' (hidden)' : ''), field(s, k));
     });
@@ -404,7 +440,8 @@ function parseMd(md, fallbackTitle) {
       const h = line.slice(3).trim().toLowerCase();
       const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
       if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
-      cur = { text: [], und: [], hidden: [], qs: [] }; stanzas.push(cur); buf = cur.text; continue;
+      cur = { text: [], und: [], hidden: [], qs: [], epigraph: h === 'epigraph' && !stanzas.length };
+      stanzas.push(cur); buf = cur.text; continue;
     }
     if (cur && /^### /.test(line)) {
       let h = line.slice(4).trim().toLowerCase();
@@ -432,6 +469,7 @@ function parseMd(md, fallbackTitle) {
     const out = newStanza();
     ['text', 'und', ...EXTRAS.map(([k]) => k)].forEach(k => { if (s[k]) setField(out, k, s[k]); });
     out.hidden = s.hidden.filter(k => out[k] != null);
+    if (s.epigraph) out.epigraph = true;
     out.qs = s.qs.map(q => {
       const o = newQuestion();
       o.hidden = q.hidden;
@@ -748,7 +786,7 @@ async function open(k) {
   const e = cache.poems[k];
   if (!e) return;
   current = k; touch(); $('#poem').value = k;
-  interpOpen = false;
+  interpOpen = false; expanded.clear();
   const needs = e.md == null || (!e.dirty && e.remoteRev && e.rev !== e.remoteRev);
   if (needs && navigator.onLine && e.remoteRev) {
     try {
@@ -772,8 +810,8 @@ function emptyEl(msg) {
 function renderEmpty(msg) {
   document.body.append(palette); palette.hidden = true;
   $('#list').innerHTML = ''; $('#list').append(emptyEl(msg));
-  $('#final').innerHTML = ''; $('#interp').innerHTML = '';
-  $('#addStanza').hidden = $('#addFinal').hidden = $('#addInterp').hidden = true;
+  $('#date').innerHTML = ''; $('#final').innerHTML = ''; $('#interp').innerHTML = '';
+  $('#addStanza').hidden = $('#addDate').hidden = $('#addFinal').hidden = $('#addInterp').hidden = true;
 }
 
 let interpOpen = false;   // Additional interpretation: collapsed whenever a poem opens (not saved)
@@ -811,16 +849,24 @@ function render() {
   list.innerHTML = '';
   if (model.stanzas.length) model.stanzas.forEach((s, i) => list.append(stanzaEl(s, i)));
   else list.append(emptyEl('No stanzas yet. Add the first one below.'));
+  const removeSection = (k, what) => button('Remove', '', () => {
+    if (model[k] && !confirm('Remove the ' + what + '? Its text will be deleted.')) return;
+    delete model[k]; delete model.marks[k]; changed(); render();
+  });
+  const date = $('#date');
+  date.innerHTML = '';
+  if (model.date != null) date.append(fieldEl(model, 'date', 'fdate', 'Date', '', [removeSection('date', 'date')]));
   const fin = $('#final');
   fin.innerHTML = '';
-  if (model.final != null) fin.append(fieldEl(model, 'final', 'ffinal', 'Conclusion', '', [button('Remove', '', () => {
-    if (model.final && !confirm('Remove the conclusion? Its text will be deleted.')) return;
-    delete model.final; delete model.marks.final; changed(); render();
-  })]));
+  if (model.final != null) fin.append(fieldEl(model, 'final', 'ffinal', 'Conclusion', '', [
+    button('Copy', '', () => model.final.trim() ? copy(model.final) : toast('Nothing to copy: the conclusion is empty.', true)),
+    removeSection('final', 'conclusion')
+  ]));
   const ip = $('#interp');
   ip.innerHTML = '';
   if (model.interp != null) ip.append(interpEl());
   $('#addStanza').hidden = false;
+  $('#addDate').hidden = model.date != null;
   $('#addFinal').hidden = model.final != null;
   $('#addInterp').hidden = model.interp != null;
   document.querySelectorAll('main textarea').forEach(grow);
@@ -836,14 +882,24 @@ function button(text, cls, onClick) {
   return b;
 }
 // A text field of obj[key] with its highlights (obj.marks[key]) drawn on a backdrop
-function fieldEl(obj, key, id, label, cls, tools) {
+// collapsible: long text is cut with an Expand/Collapse button (see grow)
+function fieldEl(obj, key, id, label, cls, tools, collapsible) {
   const wrap = document.createElement('div'); wrap.className = 'field';
   const head = document.createElement('div'); head.className = 'fhead';
   const l = document.createElement('label'); l.htmlFor = id; l.textContent = label;
-  head.append(l, ...(tools || []));
+  const t = document.createElement('textarea'); t.id = id; t.rows = 1; t.value = obj[key];
+  if (collapsible) {
+    t._more = button('Expand', '', () => {
+      if (t.parentNode.classList.contains('clamped')) expanded.add(id); else { expanded.delete(id); t.blur(); }
+      grow(t);
+    });
+    // While editing it's shown in full; leaving cuts it again unless it was expanded with the button
+    t.addEventListener('focus', () => grow(t));
+    t.addEventListener('blur', () => grow(t));
+  }
+  head.append(l, ...(t._more ? [t._more] : []), ...(tools || []));
   const box = document.createElement('div'); box.className = 'hl' + (cls ? ' ' + cls : '');
   const bd = document.createElement('div'); bd.className = 'backdrop'; bd.setAttribute('aria-hidden', 'true');
-  const t = document.createElement('textarea'); t.id = id; t.rows = 1; t.value = obj[key];
   if (cls) t.className = cls;
   t._f = { obj, key, bd }; t._prev = t.value;
   paintBackdrop(t);
@@ -856,12 +912,13 @@ function fieldEl(obj, key, id, label, cls, tools) {
   return wrap;
 }
 function stanzaEl(s, i) {
-  const art = document.createElement('article'); art.className = 'stanza';
-  const num = document.createElement('div'); num.className = 'num'; num.textContent = i + 1;
+  const epi = i === 0 && !!s.epigraph, no = stanzaNo(model, i), name = epi ? 'the epigraph' : 'stanza ' + no;
+  const art = document.createElement('article'); art.className = 'stanza' + (epi ? ' epigraph' : '');
+  const num = document.createElement('div'); num.className = 'num'; num.textContent = epi ? '' : no;
   const f = document.createElement('div'); f.className = 'fields';
   const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '');
   if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
-  f.append(fieldEl(s, 'text', 'f' + i + 'text', 'Text', 'verse'), und);
+  f.append(fieldEl(s, 'text', 'f' + i + 'text', epi ? 'Epigraph' : 'Text', epi ? 'verse epi' : 'verse'), und);
 
   const shown = EXTRAS.filter(([k]) => s[k] != null && !s.hidden.includes(k));
   const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
@@ -871,18 +928,22 @@ function stanzaEl(s, i) {
     shown.forEach(([k, label]) => ex.append(fieldEl(s, k, 'f' + i + k, label, '', [
       button('Hide', '', () => { s.hidden.push(k); changed(); render(); }),
       button('Remove', '', () => {
-        if (s[k] && !confirm('Remove “' + label + '” from stanza ' + (i + 1) + '? Its text will be deleted.')) return;
+        if (s[k] && !confirm('Remove “' + label + '” from ' + name + '? Its text will be deleted.')) return;
         delete s[k]; delete s.marks[k]; s.hidden = s.hidden.filter(x => x !== k); changed(); render();
       })
-    ])));
+    ], true)));
     shownQs.forEach(([q, j]) => ex.append(questionEl(s, i, q, j)));
     f.append(ex);
   }
 
   const a = document.createElement('div'); a.className = 'actions';
-  a.append(button('Delete stanza', 'quiet', () => {
-    if (!confirm('Delete stanza ' + (i + 1) + ' with its notes?')) return;
+  a.append(button(epi ? 'Delete epigraph' : 'Delete stanza', 'quiet', () => {
+    if (!confirm('Delete ' + name + ' with its notes?')) return;
     model.stanzas.splice(i, 1); changed(); render();
+  }));
+  if (i === 0) a.append(button(epi ? 'Not an epigraph' : 'Mark as epigraph', '', () => {
+    if (epi) delete s.epigraph; else s.epigraph = true;
+    changed(); render();
   }));
   EXTRAS.filter(([k]) => s[k] != null && s.hidden.includes(k)).forEach(([k, label]) => {
     a.append(button('Show ' + label.toLowerCase(), '', () => {
@@ -890,12 +951,12 @@ function stanzaEl(s, i) {
     }));
   });
   s.qs.forEach((q, j) => {
-    if (q.hidden) a.append(button('Show Q' + (i + 1) + '.' + (j + 1), '', () => {
+    if (q.hidden) a.append(button('Show Q' + no + '.' + (j + 1), '', () => {
       q.hidden = false; changed(); render(); focusField('f' + i + 'q' + j);
     }));
   });
   const add = document.createElement('select');
-  add.setAttribute('aria-label', 'Add a column to stanza ' + (i + 1));
+  add.setAttribute('aria-label', 'Add a column to ' + name);
   [['', '+ Column'], ['q', 'Question'], ...EXTRAS.filter(([k]) => s[k] == null)].forEach(([k, label]) => {
     const o = document.createElement('option'); o.value = k; o.textContent = label; add.append(o);
   });
@@ -907,10 +968,10 @@ function stanzaEl(s, i) {
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
     const val = (o, k) => encodeMarks(o[k], o.marks[k]);
-    let t = '“' + model.title + '”, stanza ' + (i + 1) + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
+    let t = '“' + model.title + '”, ' + name + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
     EXTRAS.forEach(([k, label]) => { if (s[k]) t += '\n\n' + label + ':\n' + val(s, k); });
     s.qs.forEach((q, j) => {
-      const n = (i + 1) + '.' + (j + 1);
+      const n = no + '.' + (j + 1);
       if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
     });
     copy(t);
@@ -922,7 +983,7 @@ function stanzaEl(s, i) {
 
 // Question j of stanza i («Q2.1») with its optional answer («A2.1») in one block
 function questionEl(s, i, q, j) {
-  const n = (i + 1) + '.' + (j + 1);
+  const n = stanzaNo(model, i) + '.' + (j + 1);
   const box = document.createElement('div'); box.className = 'qa';
   const tools = [
     button('Hide', '', () => { q.hidden = true; changed(); render(); }),
@@ -932,11 +993,11 @@ function questionEl(s, i, q, j) {
     })
   ];
   if (q.a == null) tools.unshift(button('+ Answer', '', () => { q.a = ''; changed(); render(); focusField('f' + i + 'a' + j); }));
-  box.append(fieldEl(q, 'q', 'f' + i + 'q' + j, 'Q' + n, '', tools));
+  box.append(fieldEl(q, 'q', 'f' + i + 'q' + j, 'Q' + n, '', tools, true));
   if (q.a != null) box.append(fieldEl(q, 'a', 'f' + i + 'a' + j, 'A' + n, '', [button('Remove', '', () => {
     if (q.a && !confirm('Remove A' + n + '? Its text will be deleted.')) return;
     delete q.a; delete q.marks.a; changed(); render();
-  })]));
+  })], true));
   return box;
 }
 function addQuestion(s, i) {
@@ -1204,7 +1265,18 @@ $('#logout').addEventListener('click', () => {
 $('#poem').addEventListener('change', e => open(e.target.value));
 $('#copyAll').addEventListener('click', () => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
-  copy(serialize(model));
+  copy(serialize({ ...model, interp: undefined }));   // without the additional interpretation
+});
+// Just the poem: title, stanzas (the epigraph first) and date, without notes or highlights
+$('#copyVerse').addEventListener('click', () => {
+  if (!model || !model.stanzas.some(s => s.text.trim())) { toast('Nothing to copy: the poem has no text yet.', true); return; }
+  copy([model.title, ...model.stanzas.map(s => s.text).filter(t => t.trim()), ...(model.date ? [model.date] : [])].join('\n\n'));
+});
+$('#addDate').addEventListener('click', () => {
+  if (!model) return;
+  model.date = '';
+  changed(); render();
+  focusField('fdate');
 });
 $('#addStanza').addEventListener('click', () => {
   if (!model) return;

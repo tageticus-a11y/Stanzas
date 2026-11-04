@@ -44,6 +44,10 @@ lives in the owner's Dropbox. No server of our own, no build step.
 ```
 # Title
 
+## Epigraph
+
+optional: only the first stanza can be one; the stanzas after it count from 1
+
 ## 1
 
 verse lines
@@ -64,6 +68,10 @@ shown as Q<stanza>.1
 
 optional answer to question 1
 
+## Date
+
+optional free text (authors write dates in many ways)
+
 ## Conclusion
 
 optional, after the last stanza
@@ -83,8 +91,12 @@ optional, long (pasted from Claude), shown collapsed
   `stanza.qs = [{ q, a?, hidden, marks }]`. The legacy single `### Questions`
   becomes question 1.
 - A ` (hidden)` suffix marks a collapsed column or question.
-- Poem-level `SECTIONS` come after the last stanza: `## Conclusion`, then
-  `## Additional interpretation`. Any other `## ` heading starts a stanza. The
+- Epigraph: `stanza.epigraph = true`, written as `## Epigraph`, and only
+  honoured on the first stanza. It keeps understanding, columns and questions
+  like any stanza. `stanzaNo()` numbers it «E» (questions «QE.1») and counts
+  the stanzas after it from 1.
+- Poem-level `SECTIONS` come after the last stanza: `## Date`, `## Conclusion`,
+  then `## Additional interpretation`. Any other `## ` heading starts a stanza. The
   interpretation shows collapsed whenever a poem opens; that state isn't saved.
 - Summary is gone: `### Summary` / `### Выжимка` sections are dropped when
   read, and a 4th TSV import column is ignored.
@@ -116,6 +128,15 @@ optional, long (pasted from Claude), shown collapsed
   picker.
 - The highlight palette sits in the sticky top bar on fine-pointer devices, and
   on its own row under the focused field's label on touch.
+- Copy buttons:
+  - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
+  - «Copy all for Claude»: `serialize` without the additional interpretation.
+  - Conclusion «Copy»: just its text.
+  - Per-stanza «Copy for Claude»: the stanza with its notes, highlights kept as
+    `<mark>`.
+- Long Other interpretations, questions and answers are cut to `CLAMP` px with
+  a fade (`grow()`). They're shown in full while focused or after «Expand».
+  The expanded state lives in memory and is cleared when a poem opens.
 - Keyboard: Ctrl/Cmd+Enter in «My understanding» or a question adds a
   question. Shift+Tab goes from a question back to «My understanding», and
   from an answer back to its question.
