@@ -155,6 +155,20 @@
   .actions select { font-family: inherit; color: var(--ink); background: var(--surface);
     border: 1px solid var(--rule); border-radius: 6px; }
   .actions .grow { flex: 1; }
+  .fhead select { font: inherit; font-size: .78rem; color: var(--muted); background: transparent;
+    border: 1px solid transparent; border-radius: 6px; padding: 0 2px; width: 5.2em; }
+  /* Stanza heading («II», «----»): one small centred line above the text */
+  .textcol { display: grid; gap: 2px; min-width: 0; }
+  .headfield { position: relative; }
+  .headfield .fhead { position: absolute; top: 2px; right: 0; z-index: 1; min-height: 0; margin: 0; }
+  /* on touch the palette joins the field's header: then the header takes its own row */
+  .headfield:has(#palette:not([hidden])) .fhead { position: static; justify-content: flex-end; }
+  .headfield .fhead label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  textarea.verse.head, textarea.verse.head:focus, .hl.verse.head .backdrop, .hl.verse.head:focus-within .backdrop {
+    font-size: .92rem; text-align: center; }
+  textarea.verse.head, textarea.verse.head:focus { padding-left: 28px; padding-right: 28px; }
+  .hl.verse.head .backdrop, .hl.verse.head:focus-within .backdrop {
+    padding-left: calc(28px + var(--ti, 0px)); padding-right: calc(28px + var(--ti, 0px)); }
   .empty { color: var(--muted); padding: 32px 0 0; }
   .foot { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
   .foot .muted { color: var(--muted); font-size: .85rem; flex-basis: 100%; }
@@ -265,6 +279,19 @@
     <div class="row">
       <button type="button" id="cancelNew">Cancel</button>
       <button type="submit" class="primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="namesDialog">
+  <form method="dialog" id="namesForm">
+    <h2 id="namesTitle">Interpreters</h2>
+    <label for="namesText">One name per line</label>
+    <textarea id="namesText"></textarea>
+    <p class="hint" id="namesHint"></p>
+    <div class="row">
+      <button type="button" id="cancelNames">Cancel</button>
+      <button type="submit" class="primary">Save</button>
     </div>
   </form>
 </dialog>
@@ -492,8 +519,10 @@ function serialize(m) {
   const field = (o, k) => escLine(encodeField(o, k));
   m.stanzas.forEach((s, i) => {
     const kind = kindOf(m, i);
-    parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)),
-      field(s, 'text'), '### My understanding', field(s, 'und'));
+    const head = !kind && s.head ? ': ' + encodeField(s, 'head').replace(/\n/g, ' ') : '';
+    parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)) + head, field(s, 'text'));
+    // only the title block may go without «My understanding»
+    if (s.und != null || kind !== 'title') parts.push('### My understanding', field({ und: s.und || '', marks: s.marks }, 'und'));
     s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
@@ -521,8 +550,11 @@ function parseMd(md, fallbackTitle) {
       const h = line.slice(3).trim().toLowerCase();
       const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
       if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
-      cur = { text: [], und: [], oths: [], qs: [], isTitle: h === 'title' && !stanzas.length,
-        epigraph: h === 'epigraph' && (!stanzas.length || (stanzas.length === 1 && stanzas[0].isTitle)) };
+      // "## 2: II": the stanza's heading follows the colon (taken from the line itself, to keep its case)
+      const colon = line.indexOf(':'), kind = colon < 0 ? h : line.slice(3, colon).trim().toLowerCase();
+      cur = { text: [], und: null, oths: [], qs: [], isTitle: kind === 'title' && !stanzas.length,
+        epigraph: kind === 'epigraph' && (!stanzas.length || (stanzas.length === 1 && stanzas[0].isTitle)) };
+      if (colon >= 0 && !cur.isTitle && !cur.epigraph) cur.head = line.slice(colon + 1).trim();
       stanzas.push(cur); buf = cur.text; continue;
     }
     if (cur && /^### /.test(line)) {
@@ -544,14 +576,16 @@ function parseMd(md, fallbackTitle) {
         let q = cur.qs[parseInt(h.replace(/^\D+/, ''), 10) - 1] || cur.qs[cur.qs.length - 1];
         if (!q) { q = { q: [], hidden: false }; cur.qs.push(q); }
         buf = q.a = [];
-      } else buf = cur[f];   // "My understanding"
+      } else buf = cur[f] = cur[f] || [];   // "My understanding"
       continue;
     }
     if (buf) buf.push(unescLine(line));
   }
   const m = { title, marks: {}, stanzas: stanzas.map(s => {
     const out = newStanza();
-    setField(out, 'text', s.text); setField(out, 'und', s.und);
+    setField(out, 'text', s.text); setField(out, 'und', s.und || []);
+    if (s.head) setField(out, 'head', [s.head]);
+    if (s.isTitle && !s.und) out.und = null;   // the title block's understanding is optional
     out.oths = s.oths.map(o => {
       const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o);
       if (o.by) x.by = o.by;
@@ -686,6 +720,8 @@ async function listRemote() {
   return {
     files: all.filter(x => x['.tag'] === 'file' && /\.md$/i.test(x.name))
       .map(x => ({ path: x.path_display, rev: x.rev, mod: x.server_modified })),
+    lists: all.filter(x => x['.tag'] === 'file' && x.name.toLowerCase() === NAMES_FILE)
+      .map(x => ({ path: x.path_display, rev: x.rev })),
     folders: all.filter(x => x['.tag'] === 'folder').map(x => x.path_display).sort((a, b) => a.localeCompare(b))
   };
 }
@@ -709,6 +745,8 @@ async function upload(path, text, rev, autorename) {
 // cache.poems[key] = { path, rev, remoteRev, md, dirty, ver, mod, ownMod }; key = lowercased path.
 // mod is Dropbox's server_modified; ownMod is the mod of this device's last upload.
 // cache.folders = Dropbox folder paths (Poet, Poet/Group, …)
+// cache.names[lowercased folder, '' = root] = { path, rev, list }: interpreter names from that folder's
+// _interpreters.txt, offered for poems in it and its subfolders
 const cache = store.get('st.cache') || { poems: {} };
 const saveCache = () => store.set('st.cache', cache);
 const nameOf = e => e.path.split('/').pop().replace(/\.md$/i, '');
@@ -743,6 +781,38 @@ function allFolders() {
   return [...seen.values()].sort((a, b) => a.localeCompare(b));
 }
 
+/* ============ Interpreter names ============ */
+const NAMES_FILE = '_interpreters.txt';
+// One name per line; blank lines and repeats (in any letter case) dropped, the first spelling kept
+const parseNames = t => t.replace(/\r/g, '').split('\n').map(n => n.replace(/\s+/g, ' ').trim())
+  .filter((n, i, all) => n && all.findIndex(x => x.toLowerCase() === n.toLowerCase()) === i);
+// Download the lists whose rev changed; returns whether any list changed
+async function syncNames(lists) {
+  const names = cache.names = cache.names || {}, seen = new Set();
+  let diff = false;
+  for (const r of lists) {
+    const k = folderOf(r).toLowerCase(); seen.add(k);
+    if (names[k] && names[k].rev === r.rev) { names[k].path = r.path; continue; }
+    const d = await download(r.path);
+    names[k] = { path: r.path, rev: d.rev || r.rev, list: parseNames(d.text) }; diff = true;
+  }
+  for (const k of Object.keys(names)) if (!seen.has(k)) { delete names[k]; diff = true; }
+  return diff;
+}
+// The open poem's folder and its parents, nearest first: '/Poet/Group', '/Poet', ''
+function levels() {
+  const e = current && cache.poems[current];
+  let f = e ? folderOf(e) : '';
+  const out = [f];
+  while (f) { f = f.slice(0, f.lastIndexOf('/')); out.push(f); }
+  return out;
+}
+const listAt = f => ((cache.names || {})[f.toLowerCase()] || {}).list || [];
+// Names for the open poem from every level that has a list, nearest first
+const namesHere = () => parseNames(levels().flatMap(listAt).join('\n'));
+// The «+ Claude» name: the first name of the list closest to the root
+const quickName = () => levels().reverse().map(listAt).filter(l => l.length).map(l => l[0])[0] || null;
+
 function handleErr(e) {
   if (e instanceof AuthError) { show('login'); toast(e.message, true); return; }
   if (e instanceof TypeError) { setStatus(OFFLINE); return; }
@@ -756,8 +826,9 @@ async function sync() {
     if (!navigator.onLine) { setStatus(OFFLINE); return; }
     setStatus('Syncing…');
     await pushAll();
-    const { files, folders } = await listRemote();
+    const { files, folders, lists } = await listRemote();
     cache.folders = folders;
+    const namesDiff = await syncNames(lists);
     const seen = new Set();
     for (const r of files) {
       const k = r.path.toLowerCase(); seen.add(k);
@@ -768,6 +839,7 @@ async function sync() {
     for (const k of Object.keys(cache.poems)) if (!seen.has(k) && !cache.poems[k].dirty) delete cache.poems[k];
     saveCache();
     renderPicker();
+    if (namesDiff && model && !document.activeElement.matches('main textarea, main select')) render();
     if (current && !cache.poems[current]) {
       // The open poem was moved or renamed in Dropbox: follow it by file name
       const file = current.split('/').pop();
@@ -775,7 +847,7 @@ async function sync() {
       if (same.length === 1) await open(same[0]); else current = null;
     }
     const nf = newestForeign(), cur = current && cache.poems[current];
-    const busy = document.activeElement.matches('textarea, input') || dlg.open || (cur && cur.dirty);
+    const busy = document.activeElement.matches('textarea, input') || dlg.open || namesDlg.open || (cur && cur.dirty);
     if (nf && nf !== current && cache.poems[nf].mod > (lastUsed().ack || '') && !busy) {
       await open(nf);
       toast('Opened “' + nameOf(cache.poems[nf]) + '”: last edited on another device.');
@@ -1008,10 +1080,28 @@ function stanzaEl(s, i) {
   const art = document.createElement('article'); art.className = 'stanza' + (kind ? ' ' + kind : '');
   const num = document.createElement('div'); num.className = 'num'; num.textContent = kind ? '' : no;
   const f = document.createElement('div'); f.className = 'fields';
-  const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '');
-  if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
-  f.append(fieldEl(s, 'text', 'f' + i + 'text', kind === 'title' ? 'Title' : epi ? 'Epigraph' : 'Text',
-    kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse'), und);
+  if (s.und == null && kind !== 'title') s.und = '';
+  const col = document.createElement('div'); col.className = 'textcol';
+  if (!kind && s.head != null) {
+    const h = fieldEl(s, 'head', 'f' + i + 'head', 'Heading of ' + name, 'verse head', [
+      button('×', '', () => { delete s.head; dropMarks(s, 'head'); changed(); render(); })]);
+    h.classList.add('headfield');
+    h.querySelector('.fhead button').setAttribute('aria-label', 'Remove the heading');
+    h.querySelector('textarea').placeholder = 'Heading';
+    h.querySelector('textarea').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    col.append(h);
+  }
+  col.append(fieldEl(s, 'text', 'f' + i + 'text', kind === 'title' ? 'Title' : epi ? 'Epigraph' : 'Text',
+    kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse'));
+  f.append(col);
+  if (s.und != null) {
+    const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', kind === 'title' ? [button('Remove', '', () => {
+      if (s.und && !confirm('Remove your understanding of the title? Its text will be deleted.')) return;
+      s.und = null; dropMarks(s, 'und'); changed(); render();
+    })] : []);
+    if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
+    f.append(und);
+  }
 
   const shownOths = s.oths.map((o, j) => [o, j]).filter(([o]) => !o.hidden);
   const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
@@ -1019,13 +1109,7 @@ function stanzaEl(s, i) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
     shownOths.forEach(([o, j]) => ex.append(fieldEl(o, 'o', 'f' + i + 'o' + j, otherLabel(s, j), '', [
-      button('Name', '', () => {
-        const v = prompt('Whose interpretation is this? Leave empty to number it instead.', o.by || '');
-        if (v === null) return;
-        const by = v.replace(/\s+/g, ' ').trim();
-        if (by) o.by = by; else delete o.by;
-        changed(); render();
-      }),
+      nameSelect(o, otherLabel(s, j)),
       button('Hide', '', () => { o.hidden = true; changed(); render(); }),
       button('Remove', '', () => {
         if (o.o && !confirm('Remove “' + otherLabel(s, j) + '” from ' + name + '? Its text will be deleted.')) return;
@@ -1061,7 +1145,9 @@ function stanzaEl(s, i) {
   const opt = (parent, v, label) => { const o = document.createElement('option'); o.value = v; o.textContent = label; parent.append(o); };
   opt(add, '', '+ Add');
   const cols = document.createElement('optgroup'); cols.label = kind === 'title' ? 'This title' : epi ? 'This epigraph' : 'This stanza';
+  if (s.und == null) opt(cols, 'und', 'My understanding');
   opt(cols, 'q', 'Question'); opt(cols, 'o', 'Other interpretation');
+  if (!kind && s.head == null) opt(cols, 'head', 'Heading above');
   const st = document.createElement('optgroup'); st.label = 'New stanza';
   // ordinary stanzas can't go above a title or epigraph, or between them
   if (!kind) opt(st, 'above', 'Stanza above');
@@ -1073,22 +1159,31 @@ function stanzaEl(s, i) {
   add.addEventListener('change', () => {
     const v = add.value;
     if (v === 'q') addQuestion(s, i);
+    else if (v === 'und') { s.und = ''; changed(); render(); focusField('f' + i + 'und'); }
+    else if (v === 'head') { s.head = ''; changed(); render(); focusField('f' + i + 'head'); }
     else if (v === 'o') { s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
     else if (v === 'above' || v === 'below' || v === 'epigraph' || v === 'title') {
       const at = v === 'below' ? i + 1 : v === 'title' ? 0 : i;
       const ns = newStanza(v === 'title' ? model.title : '');
       if (v === 'epigraph') ns.epigraph = true;
-      if (v === 'title') ns.isTitle = true;
+      if (v === 'title') { ns.isTitle = true; ns.und = null; }
       model.stanzas.splice(at, 0, ns);
       expanded.clear();   // field ids move with the stanzas
       changed(); render(); focusField('f' + at + 'text');
     }
   });
   a.append(add);
+  // One click for the usual interpreter (the first name of the list closest to the root)
+  const qn = quickName();
+  if (qn) a.append(button('+ ' + qn, '', () => {
+    const o = newOther(); o.by = qn; s.oths.push(o);
+    changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
+  }));
   const gap = document.createElement('span'); gap.className = 'grow';
   a.append(gap, button('Copy for Claude', '', () => {
     const val = (o, k) => encodeField(o, k);
-    let t = '“' + model.title + '”, ' + name + '\n\n' + val(s, 'text') + '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
+    let t = '“' + model.title + '”, ' + name + '\n\n' + (!kind && s.head ? val(s, 'head') + '\n\n' : '') + val(s, 'text');
+    if (s.und != null) t += '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
     s.oths.forEach((o, j) => {
       if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
     });
@@ -1103,6 +1198,36 @@ function stanzaEl(s, i) {
   return art;
 }
 
+// «Name» menu of an other interpretation: names from the folder lists, a one-off name, no name, edit a list
+function nameSelect(o, label) {
+  const sel = document.createElement('select');
+  sel.setAttribute('aria-label', 'Interpreter of “' + label + '”');
+  const opt = (parent, v, text) => { const x = document.createElement('option'); x.value = v; x.textContent = text; parent.append(x); };
+  const group = text => { const g = document.createElement('optgroup'); g.label = text; sel.append(g); return g; };
+  opt(sel, '', 'Name');
+  const names = namesHere(), cur = (o.by || '').toLowerCase();
+  if (names.length) { const g = group('Interpreters'); names.forEach(n => opt(g, 'n:' + n, (n.toLowerCase() === cur ? '✓ ' : '') + n)); }
+  const g = group('Other');
+  opt(g, 'other', 'Other name…');
+  if (o.by) opt(g, 'none', 'No name');
+  const lists = group('Lists');
+  levels().forEach(f => opt(lists, 'edit:' + f, f ? 'Edit list for ' + folderLabel(f) + '…' : 'Edit list for all poets…'));
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    sel.value = '';
+    if (v.startsWith('edit:')) { editNames(v.slice(5)); return; }
+    if (v.startsWith('n:')) o.by = v.slice(2);
+    else if (v === 'none') delete o.by;
+    else if (v === 'other') {
+      const t = prompt('Whose interpretation is this? Leave empty to number it instead.', o.by || '');
+      if (t === null) return;
+      const by = t.replace(/\s+/g, ' ').trim();
+      if (by) o.by = by; else delete o.by;
+    } else return;
+    changed(); render();
+  });
+  return sel;
+}
 // Caption: the interpreter's name if given, otherwise numbered (only when there's more than one)
 const otherLabel = (s, j) => s.oths[j].by || 'Other interpretation' + (s.oths.length > 1 ? ' ' + (j + 1) : '');
 // Question j of stanza i («Q2.1») with its optional answer («A2.1») in one block
@@ -1139,7 +1264,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && m[2] !== 'a') { e.preventDefault(); addQuestion(s, i); }
   else if (e.key === 'Tab' && e.shiftKey && !e.ctrlKey && !e.altKey && m[2] !== 'und') {
     e.preventDefault();
-    document.getElementById('f' + i + (m[2] === 'q' ? 'und' : 'q' + m[3])).focus();
+    (document.getElementById('f' + i + (m[2] === 'q' ? 'und' : 'q' + m[3])) || document.getElementById('f' + i + 'text')).focus();
   }
 });
 
@@ -1421,7 +1546,9 @@ $('#copyAll').addEventListener('click', () => {
 // without notes or formatting
 $('#copyVerse').addEventListener('click', () => {
   if (!model || !model.stanzas.some(s => s.text.trim())) { toast('Nothing to copy: the poem has no text yet.', true); return; }
-  const titled = kindOf(model, 0) === 'title', body = model.stanzas.slice(titled ? 1 : 0).map(s => s.text).filter(t => t.trim());
+  const titled = kindOf(model, 0) === 'title';
+  const body = model.stanzas.flatMap((s, i) => i === 0 && titled ? [] : [kindOf(model, i) ? '' : s.head || '', s.text])
+    .filter(t => t && t.trim());
   copy([titled ? model.stanzas[0].text : model.title, ...body, ...(model.date ? [model.date] : [])].join('\n\n'));
 });
 $('#addDate').addEventListener('click', () => {
@@ -1495,6 +1622,38 @@ $('#newForm').addEventListener('submit', async ev => {
   await open(k);
   toast('Created with ' + m.stanzas.length + (m.stanzas.length === 1 ? ' stanza' : ' stanzas'));
   push(k).catch(handleErr);
+});
+
+// Editing an interpreter list: saved to Dropbox right away as <folder>/_interpreters.txt
+const namesDlg = $('#namesDialog');
+let namesFolder = '';
+function editNames(folder) {
+  namesFolder = folder;
+  $('#namesTitle').textContent = 'Interpreters: ' + (folder ? folderLabel(folder) : 'all poets');
+  $('#namesHint').textContent = (folder ? 'Offered for poems in ' + folderLabel(folder) + ' and its subfolders.'
+    : 'Offered for every poem. The first name gets its own «+» button on each stanza.') +
+    ' Saved in Dropbox as ' + (folder ? folder.slice(1) + '/' : '') + NAMES_FILE + '.';
+  $('#namesText').value = listAt(folder).join('\n');
+  if (!namesDlg.open) namesDlg.showModal();
+  $('#namesText').focus();
+}
+$('#cancelNames').addEventListener('click', () => namesDlg.close());
+$('#namesForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if (!navigator.onLine) { toast('You’re offline. Connect to the internet and save the list again.', true); return; }
+  const k = namesFolder.toLowerCase(), old = (cache.names || {})[k], list = parseNames($('#namesText').value);
+  try {
+    const r = await upload(old ? old.path : namesFolder + '/' + NAMES_FILE, list.join('\n') + (list.length ? '\n' : ''), old ? old.rev : null);
+    (cache.names = cache.names || {})[k] = { path: r.path_display, rev: r.rev, list };
+    saveCache(); namesDlg.close();
+    if (model) render();
+    toast('List saved.');
+  } catch (e) {
+    if (!e.conflict) { handleErr(e); return; }
+    await sync();
+    editNames(namesFolder);
+    toast('The list was changed on another device. Here’s the latest version: make your changes again and save.', true);
+  }
 });
 
 window.addEventListener('online', sync);

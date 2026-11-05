@@ -24,6 +24,17 @@ lives in the owner's Dropbox. No server of our own, no build step.
   («Poet › Group»), and «New» lets you pick or create a folder (upload
   creates missing folders). If the open poem's path disappears, sync follows it
   by file name, so poems can be moved in Dropbox.
+- **Interpreter lists:** any folder may hold `_interpreters.txt` (one name per
+  line). Sync downloads them when their rev changes into `cache.names[lowercased
+  folder, '' = root] = { path, rev, list }`.
+  - **Which names a poem gets:** its folder's list and every parent's, nearest
+    first (`levels()`, `namesHere()`); levels without a file are skipped.
+  - **Name menu:** the interpretation's «Name» `<select>` offers these names,
+    «Other name…» (typed by hand), «No name» and «Edit list for …» per level.
+    Edits upload at once (`mode: update` with the rev; on a conflict the latest
+    list is shown again).
+  - **Quick button:** the «+ <name>» button on each stanza uses the first name
+    of the list closest to the root (`quickName()`).
 - **Dropbox-API-Arg header** must be ASCII: non-ASCII chars are escaped as `\uXXXX`
   (see `hdr()`). Poem titles are Cyrillic, so this matters.
 - **Local cache:** `st.cache` in localStorage, `poems[lowercased path] =
@@ -46,13 +57,14 @@ lives in the owner's Dropbox. No server of our own, no build step.
 
 ## Title
 
-optional title block (first), with notes like a stanza
+optional title block (first), with notes like a stanza; its
+### My understanding is optional
 
 ## Epigraph
 
 optional: only the first stanza can be one; the stanzas after it count from 1
 
-## 1
+## 1: II. optional heading
 
 verse lines
 
@@ -86,10 +98,17 @@ optional, long (pasted from Claude), shown collapsed
 ```
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
-- `### My understanding` is always written, even when empty.
+- `### My understanding` is always written, even when empty, except on the
+  title block, where `und === null` means there is none (it can be removed and
+  added back).
+- Stanza heading (`stanza.head`: «II», «Часть первая», «----»): written after a
+  colon on the stanza's `##` line and read from the original line, so case and
+  further colons are kept. Ordinary stanzas only, not the title or the epigraph.
+  It has no notes. «+ Add → Heading above» adds it, and it shows as one small
+  centred line above the text. «Copy verse» includes it.
 - Other interpretations: any number of `### Other interpretation N` per
   stanza, in memory `stanza.oths = [{ o, by?, hidden, marks }]`. `by` is the
-  interpreter's name (the «Name» button), written after a colon in the heading
+  interpreter's name (the «Name» menu), written after a colon in the heading
   and parsed from the original line so its letter case is kept. The caption is
   the name if there is one; otherwise the UI numbers them, but only when
   there's more than one (`otherLabel`). The legacy single
@@ -163,6 +182,8 @@ optional, long (pasted from Claude), shown collapsed
     - Stanza below: not on a title block that has an epigraph after it.
     - Epigraph above: on the first ordinary stanza, if there's no epigraph.
     - Title above: on the first block, if there's no title block.
+  - This stanza also offers Heading above (ordinary stanzas without one) and,
+    on a title block without one, My understanding.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
   - «Copy all for Claude»: `serialize` without the additional interpretation.
