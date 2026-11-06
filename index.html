@@ -1141,6 +1141,9 @@ function stanzaEl(s, i) {
   num.title = 'Select ' + name + ' to copy several stanzas (Shift+click: a range)';
   num.setAttribute('aria-pressed', String(selected.has(s)));
   if (selected.has(s)) art.classList.add('sel');
+  // Keep the focus where it is: a focused long field would be cut again on blur, moving the number
+  // away from under the mouse before the click lands
+  num.addEventListener('mousedown', e => e.preventDefault());
   num.addEventListener('click', e => toggleSelect(i, e.shiftKey));
   const f = document.createElement('div'); f.className = 'fields';
   if (s.und == null && !kind) s.und = '';
@@ -1296,7 +1299,13 @@ function toggleSelect(i, range) {
     for (let k = Math.min(from, i); k <= Math.max(from, i); k++) on ? selected.add(model.stanzas[k]) : selected.delete(model.stanzas[k]);
   } else if (selected.has(s)) selected.delete(s); else selected.add(s);
   selAnchor = s;
-  render();
+  // update in place: a full render would take the caret out of the field being edited
+  [...$('#list').children].forEach((art, k) => {
+    const on = selected.has(model.stanzas[k]);
+    art.classList.toggle('sel', on);
+    const n = art.querySelector('.num'); if (n) n.setAttribute('aria-pressed', String(on));
+  });
+  renderSelbar();
 }
 function selectedIdx() { return model ? model.stanzas.map((s, i) => selected.has(s) ? i : -1).filter(i => i >= 0) : []; }
 // «stanzas 2–4, 7», with T and E for the title block and the epigraph
@@ -1323,7 +1332,7 @@ $('#selCopy').addEventListener('click', e => {
     '## ' + ({ title: 'Title', epigraph: 'Epigraph' }[kindOf(model, i)] || 'Stanza ' + stanzaNo(model, i)) + '\n\n' + stanzaForClaude(i)
   ).join('\n\n'), e.currentTarget, selName(idx));
 });
-$('#selClear').addEventListener('click', () => { selected.clear(); render(); });
+$('#selClear').addEventListener('click', () => { selected.clear(); selAnchor = null; render(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && selected.size && !document.querySelector('dialog[open]') && $('#poemList').hidden) { selected.clear(); render(); }
 });

@@ -7,7 +7,8 @@ lives in the owner's Dropbox. No server of our own, no build step.
 ## Files
 - `index.html` — the whole app: markup, CSS, JS in one file.
 - `sw.js` — service worker: caches the app shell for offline use
-  (network-first for own files, cache-first for Google Fonts, Dropbox untouched).
+  (network-first for own files, always revalidated past the HTTP cache so a deploy
+  shows up at once; cache-first for Google Fonts; Dropbox untouched).
 - `manifest.webmanifest`, `icon-180.png` (apple-touch-icon), `icon-192.png`, `icon-512.png`.
 
 ## Architecture
