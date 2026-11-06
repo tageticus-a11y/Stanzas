@@ -104,8 +104,11 @@ optional, long (pasted from Claude), shown collapsed
 - Stanza heading (`stanza.head`: «II», «Часть первая», «----»): written after a
   colon on the stanza's `##` line and read from the original line, so case and
   further colons are kept. Ordinary stanzas only, not the title or the epigraph.
-  It has no notes. «+ Add → Heading above» adds it, and it shows as one small
-  centred line above the text. «Copy verse» includes it.
+  It has no notes. «+ Add → Heading above» adds it; «Make it the heading below»
+  turns a whole stanza (e.g. a lone «----») into the next stanza's heading, keeping
+  its formatting and dropping its notes after a confirm. It takes its own grid row
+  (text, «My understanding» and the number start level below it) and `alignHeads()`
+  centres it over the verse's widest line. «Copy verse» includes it.
 - Other interpretations: any number of `### Other interpretation N` per
   stanza, in memory `stanza.oths = [{ o, by?, hidden, marks }]`. `by` is the
   interpreter's name (the «Name» menu), written after a colon in the heading
@@ -163,7 +166,8 @@ optional, long (pasted from Claude), shown collapsed
 - Vanilla JS, no frameworks, no dependencies, no bundler. Keep it one HTML file.
 - UI text is English. Use typographic quotes and apostrophes (“ ” ’) in UI strings.
   Poem content is often Russian, so keep Cyrillic-safe handling everywhere.
-- Layout: stacked cards on phones; at ≥900px two columns (text, understanding),
+- Layout: stacked cards on phones in portrait; two columns (text, understanding)
+  in landscape from 560px (optional fields then go full width below); at ≥900px
   three when a stanza shows optional columns (stacked in the third). Light and dark
   themes via CSS variables and `prefers-color-scheme`. Respect iOS safe areas.
 - Build DOM with `textContent`/`value`, never `innerHTML` with user content.
@@ -194,8 +198,10 @@ optional, long (pasted from Claude), shown collapsed
   a fade (`grow()`). They're shown in full while focused or after «Expand».
   The expanded state lives in memory and is cleared when a poem opens.
 - Keyboard: Ctrl/Cmd+Enter in «My understanding» or a question adds a
-  question. Shift+Tab goes from a question back to «My understanding», and
-  from an answer back to its question.
+  question. Tab walks the notes only: «My understanding» → the stanza's other
+  interpretations, questions, answers (as shown) → next stanza's «My
+  understanding», caret at the end. Shift+Tab walks back the same path (from
+  «My understanding» it keeps the default and goes to the verse).
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.
