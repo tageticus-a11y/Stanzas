@@ -99,8 +99,8 @@ optional, long (pasted from Claude), shown collapsed
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
 - `### My understanding` is always written, even when empty, except on the
-  title block, where `und === null` means there is none (it can be removed and
-  added back).
+  title block and the epigraph, where `und === null` means there is none (it can
+  be removed and added back).
 - Stanza heading (`stanza.head`: «II», «Часть первая», «----»): written after a
   colon on the stanza's `##` line and read from the original line, so case and
   further colons are kept. Ordinary stanzas only, not the title or the epigraph.
@@ -187,7 +187,7 @@ optional, long (pasted from Claude), shown collapsed
     - Epigraph above: on the first ordinary stanza, if there's no epigraph.
     - Title above: on the first block, if there's no title block.
   - This stanza also offers Heading above (ordinary stanzas without one) and,
-    on a title block without one, My understanding.
+    on a title block or epigraph without one, My understanding.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
   - «Copy all for Claude»: `serialize` without the additional interpretation.
@@ -200,8 +200,7 @@ optional, long (pasted from Claude), shown collapsed
 - Keyboard: Ctrl/Cmd+Enter in «My understanding» or a question adds a
   question. Tab walks the notes only: «My understanding» → the stanza's other
   interpretations, questions, answers (as shown) → next stanza's «My
-  understanding», caret at the end. Shift+Tab walks back the same path (from
-  «My understanding» it keeps the default and goes to the verse).
+  understanding», caret at the end. Shift+Tab walks back the same path.
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.

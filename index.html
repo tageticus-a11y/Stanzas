@@ -531,7 +531,7 @@ function serialize(m) {
     const head = !kind && s.head ? ': ' + encodeField(s, 'head').replace(/\n/g, ' ') : '';
     parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)) + head, field(s, 'text'));
     // only the title block may go without «My understanding»
-    if (s.und != null || kind !== 'title') parts.push('### My understanding', field({ und: s.und || '', marks: s.marks }, 'und'));
+    if (s.und != null || !kind) parts.push('### My understanding', field({ und: s.und || '', marks: s.marks }, 'und'));
     s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
@@ -594,7 +594,7 @@ function parseMd(md, fallbackTitle) {
     const out = newStanza();
     setField(out, 'text', s.text); setField(out, 'und', s.und || []);
     if (s.head) setField(out, 'head', [s.head]);
-    if (s.isTitle && !s.und) out.und = null;   // the title block's understanding is optional
+    if ((s.isTitle || s.epigraph) && !s.und) out.und = null;   // optional on the title block and the epigraph
     out.oths = s.oths.map(o => {
       const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o);
       if (o.by) x.by = o.by;
@@ -1115,7 +1115,7 @@ function stanzaEl(s, i) {
   const art = document.createElement('article'); art.className = 'stanza' + (kind ? ' ' + kind : '');
   const num = document.createElement('div'); num.className = 'num'; num.textContent = kind ? '' : no;
   const f = document.createElement('div'); f.className = 'fields';
-  if (s.und == null && kind !== 'title') s.und = '';
+  if (s.und == null && !kind) s.und = '';
   if (!kind && s.head != null) {
     const h = fieldEl(s, 'head', 'f' + i + 'head', 'Heading of ' + name, 'verse head', [
       button('×', '', () => { delete s.head; dropMarks(s, 'head'); changed(); render(); })]);
@@ -1130,8 +1130,8 @@ function stanzaEl(s, i) {
   tf.classList.add('textfield');
   f.append(tf);
   if (s.und != null) {
-    const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', kind === 'title' ? [button('Remove', '', () => {
-      if (s.und && !confirm('Remove your understanding of the title? Its text will be deleted.')) return;
+    const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', kind ? [button('Remove', '', () => {
+      if (s.und && !confirm('Remove your understanding of ' + name + '? Its text will be deleted.')) return;
       s.und = null; dropMarks(s, 'und'); changed(); render();
     })] : []);
     if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
@@ -1318,11 +1318,10 @@ document.addEventListener('keydown', e => {
 });
 // Tab walks the notes only: «My understanding», then the stanza's other interpretations, questions and
 // answers in the order shown, then the next stanza's «My understanding». Shift+Tab walks back along the
-// same path (an answer → its question, the first note → «My understanding»); from «My understanding»
-// it keeps the browser's default and goes to the verse.
+// same path: an answer → its question, the first note → «My understanding», «My understanding» →
+// the previous stanza's last note.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Tab' || e.ctrlKey || e.altKey || e.metaKey || !model) return;
-  if (e.shiftKey && /^f\d+und$/.test(e.target.id || '')) return;
   const path = [...document.querySelectorAll('#list textarea')].filter(t => /^f\d+(und|o\d+|q\d+|a\d+)$/.test(t.id));
   const at = path.indexOf(e.target);
   const t = at < 0 ? null : path[at + (e.shiftKey ? -1 : 1)];
