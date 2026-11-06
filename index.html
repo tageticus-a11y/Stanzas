@@ -88,7 +88,21 @@
     padding: 4px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
   .stanza { display: grid; grid-template-columns: 1.6rem 1fr; column-gap: 10px;
     padding: 20px 0; border-bottom: 1px solid var(--rule); }
-  .num { font-family: 'PT Serif', Georgia, serif; color: var(--gas); font-size: 1.15rem; padding-top: 22px; }
+  /* The stanza number selects the stanza for copying several at once (see #selbar) */
+  .num { align-self: start; font-family: 'PT Serif', Georgia, serif; color: var(--gas); font-size: 1.15rem;
+    padding: 22px 0 0; background: none; border: 0; border-radius: 0; text-align: left; cursor: pointer; }
+  .num span { display: inline-block; min-width: 1.3em; padding: 0 3px; border-radius: 6px; }
+  .num.special span { font-size: .85rem; color: var(--muted); }
+  .num:hover span { box-shadow: inset 0 0 0 1px var(--rule); }
+  .stanza.sel { background: color-mix(in srgb, var(--gas) 7%, transparent); }
+  .stanza.sel .num span { background: var(--gas); color: var(--on-gas); }
+  #selbar { position: fixed; left: 50%; transform: translateX(-50%); z-index: 15;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-width: calc(100% - 24px); width: max-content;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px 8px 16px;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); }
+  #selbar span { font-size: .9rem; color: var(--muted); }
+  #selbar button { font-size: .85rem; padding: 4px 10px; }
+  button.done:not(.primary) { border-color: var(--gas); color: var(--gas); }
   .fields { display: grid; gap: 12px; min-width: 0; }
   .extra { display: grid; gap: 12px; min-width: 0; }
   label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 2px; }
@@ -188,12 +202,13 @@
     .fields.has-head > .extra { grid-row: 2; }
   }
 
-  #toast { position: fixed; left: 50%; transform: translateX(-50%);
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); z-index: 30;
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: 18px;
-    font-size: .9rem; max-width: calc(100% - 32px); opacity: 0; transition: opacity .2s; pointer-events: none; }
+    font-size: .95rem; max-width: calc(100% - 32px); opacity: 0; transition: opacity .2s; pointer-events: none; }
   #toast.show { opacity: 1; }
   #toast.err { background: var(--error); color: #fff; }
+  body.selecting #toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 
   dialog { width: min(640px, calc(100% - 24px)); border: 1px solid var(--rule); border-radius: 10px;
     background: var(--paper); color: var(--ink); padding: 20px; }
@@ -257,6 +272,12 @@
 </div>
 
 <div id="toast" role="alert"></div>
+
+<div id="selbar" hidden>
+  <span id="selCount"></span>
+  <button type="button" id="selCopy" class="primary">Copy for Claude</button>
+  <button type="button" id="selClear">Clear</button>
+</div>
 
 <div id="poemList" hidden>
   <input id="plSearch" type="search" placeholder="Search poems" autocomplete="off" aria-label="Search poems" aria-controls="plRows">
@@ -346,7 +367,7 @@ function toast(msg, isError) {
   el.textContent = msg;
   el.className = 'show' + (isError ? ' err' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, isError ? 7000 : 1800);
+  toastTimer = setTimeout(() => { el.className = ''; }, isError ? 7000 : 2500);
 }
 function setStatus(t) { $('#sync').textContent = t; }
 function show(id) { ['setup', 'login', 'app'].forEach(s => { $('#' + s).hidden = s !== id; }); }
@@ -982,6 +1003,7 @@ function renderEmpty(msg) {
   $('#list').innerHTML = ''; $('#list').append(emptyEl(msg));
   $('#date').innerHTML = ''; $('#final').innerHTML = ''; $('#interp').innerHTML = '';
   $('#addStanza').hidden = $('#addDate').hidden = $('#addFinal').hidden = $('#addInterp').hidden = true;
+  renderSelbar();
 }
 
 let interpOpen = false;   // Additional interpretation: collapsed whenever a poem opens (not saved)
@@ -1029,7 +1051,7 @@ function render() {
   const fin = $('#final');
   fin.innerHTML = '';
   if (model.final != null) fin.append(fieldEl(model, 'final', 'ffinal', 'Conclusion', '', [
-    button('Copy', '', () => model.final.trim() ? copy(model.final) : toast('Nothing to copy: the conclusion is empty.', true)),
+    button('Copy', '', e => model.final.trim() ? copy(model.final, e.currentTarget, 'the conclusion') : toast('Nothing to copy: the conclusion is empty.', true)),
     removeSection('final', 'conclusion')
   ]));
   const ip = $('#interp');
@@ -1041,6 +1063,7 @@ function render() {
   $('#addInterp').hidden = model.interp != null;
   document.querySelectorAll('main textarea').forEach(grow);
   alignHeads();
+  renderSelbar();
 }
 // Centre each stanza heading over its verse: the text is left-aligned, so measure its widest line
 // (the backdrop's text) and give the heading a box of that width plus its padding, centred on it
@@ -1113,7 +1136,12 @@ function stanzaEl(s, i) {
   const first = specials(model);   // index of the first ordinary stanza
   const hasEpigraph = kindOf(model, 0) === 'epigraph' || kindOf(model, 1) === 'epigraph';
   const art = document.createElement('article'); art.className = 'stanza' + (kind ? ' ' + kind : '');
-  const num = document.createElement('div'); num.className = 'num'; num.textContent = kind ? '' : no;
+  const num = document.createElement('button'); num.type = 'button'; num.className = 'num' + (kind ? ' special' : '');
+  const nl = document.createElement('span'); nl.textContent = no; num.append(nl);
+  num.title = 'Select ' + name + ' to copy several stanzas (Shift+click: a range)';
+  num.setAttribute('aria-pressed', String(selected.has(s)));
+  if (selected.has(s)) art.classList.add('sel');
+  num.addEventListener('click', e => toggleSelect(i, e.shiftKey));
   const f = document.createElement('div'); f.className = 'fields';
   if (s.und == null && !kind) s.und = '';
   if (!kind && s.head != null) {
@@ -1233,23 +1261,72 @@ function stanzaEl(s, i) {
     changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
   }));
   const gap = document.createElement('span'); gap.className = 'grow';
-  a.append(gap, button('Copy for Claude', '', () => {
-    const val = (o, k) => encodeField(o, k);
-    let t = '“' + model.title + '”, ' + name + '\n\n' + (!kind && s.head ? val(s, 'head') + '\n\n' : '') + val(s, 'text');
-    if (s.und != null) t += '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
-    s.oths.forEach((o, j) => {
-      if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
-    });
-    s.qs.forEach((q, j) => {
-      const n = no + '.' + (j + 1);
-      if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
-    });
-    copy(t);
-  }));
+  a.append(gap, button('Copy for Claude', '', e => copy('“' + model.title + '”, ' + name + '\n\n' + stanzaForClaude(i),
+    e.currentTarget, name.replace(/^the /, ''))));
   f.append(a);
   art.append(num, f);
   return art;
 }
+
+// A stanza with its notes, highlights kept as <mark> (per-stanza «Copy for Claude» and the selection bar)
+function stanzaForClaude(i) {
+  const s = model.stanzas[i], kind = kindOf(model, i), no = stanzaNo(model, i), val = (o, k) => encodeField(o, k);
+  let t = (!kind && s.head ? val(s, 'head') + '\n\n' : '') + val(s, 'text');
+  if (s.und != null) t += '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
+  s.oths.forEach((o, j) => {
+    if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
+  });
+  s.qs.forEach((q, j) => {
+    const n = no + '.' + (j + 1);
+    if (q.q || q.a) t += '\n\nQ' + n + ': ' + val(q, 'q') + (q.a ? '\nA' + n + ': ' + val(q, 'a') : '');
+  });
+  return t;
+}
+
+/* ============ Selecting stanzas ============
+   Clicking a stanza number selects it; Shift+click selects the range from the last click.
+   The selection holds the stanza objects, so it survives edits and is gone when another poem
+   (or a reloaded version) opens. */
+const selected = new Set();
+let selAnchor = null;
+function toggleSelect(i, range) {
+  const s = model.stanzas[i], from = model.stanzas.indexOf(selAnchor);
+  if (range && from >= 0) {
+    const on = selected.has(selAnchor);
+    for (let k = Math.min(from, i); k <= Math.max(from, i); k++) on ? selected.add(model.stanzas[k]) : selected.delete(model.stanzas[k]);
+  } else if (selected.has(s)) selected.delete(s); else selected.add(s);
+  selAnchor = s;
+  render();
+}
+function selectedIdx() { return model ? model.stanzas.map((s, i) => selected.has(s) ? i : -1).filter(i => i >= 0) : []; }
+// «stanzas 2–4, 7», with T and E for the title block and the epigraph
+function selName(idx) {
+  const parts = [];
+  idx.forEach((i, k) => {
+    const no = String(stanzaNo(model, i)), prev = parts[parts.length - 1];
+    if (prev && idx[k - 1] === i - 1 && /^\d+$/.test(no) && /^\d+$/.test(prev.b)) prev.b = no;
+    else parts.push({ a: no, b: no });
+  });
+  return (idx.length > 1 ? 'stanzas ' : 'stanza ') + parts.map(p => p.a === p.b ? p.a : p.a + '–' + p.b).join(', ');
+}
+function renderSelbar() {
+  for (const s of [...selected]) if (!model || !model.stanzas.includes(s)) selected.delete(s);
+  const idx = selectedIdx();
+  $('#selbar').hidden = !idx.length;
+  document.body.classList.toggle('selecting', idx.length > 0);
+  $('#selCount').textContent = idx.length ? selName(idx) + ' selected' : '';
+}
+$('#selCopy').addEventListener('click', e => {
+  const idx = selectedIdx();
+  if (!idx.length) return;
+  copy('“' + model.title + '”, ' + selName(idx) + '\n\n' + idx.map(i =>
+    '## ' + ({ title: 'Title', epigraph: 'Epigraph' }[kindOf(model, i)] || 'Stanza ' + stanzaNo(model, i)) + '\n\n' + stanzaForClaude(i)
+  ).join('\n\n'), e.currentTarget, selName(idx));
+});
+$('#selClear').addEventListener('click', () => { selected.clear(); render(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && selected.size && !document.querySelector('dialog[open]') && $('#poemList').hidden) { selected.clear(); render(); }
+});
 
 // «Name» menu of an other interpretation: names from the folder lists, a one-off name, no name, edit a list
 function nameSelect(o, label) {
@@ -1435,10 +1512,20 @@ document.addEventListener('keydown', e => {
   track(); format(k);
 });
 
-function copy(text) {
+// Feedback: a toast saying what was copied and, for a moment, «Copied ✓» on the button itself
+function copy(text, btn, what) {
+  const done = ok => {
+    toast(ok ? 'Copied' + (what ? ' ' + what : '') + ' to the clipboard' : 'Couldn’t copy: the browser blocked clipboard access. Try again.', !ok);
+    if (ok && btn) {
+      if (!btn._label) btn._label = btn.textContent;
+      btn.textContent = 'Copied ✓'; btn.classList.add('done');
+      clearTimeout(btn._t);
+      btn._t = setTimeout(() => { btn.textContent = btn._label; btn.classList.remove('done'); }, 1600);
+    }
+  };
   if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(() => toast('Copied'), () => copyFallback(text));
-  } else copyFallback(text);
+    navigator.clipboard.writeText(text).then(() => done(true), () => done(copyFallback(text)));
+  } else done(copyFallback(text));
 }
 function copyFallback(text) {
   const t = document.createElement('textarea');
@@ -1446,7 +1533,7 @@ function copyFallback(text) {
   document.body.append(t); t.select(); t.setSelectionRange(0, text.length);
   let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
   t.remove();
-  toast(ok ? 'Copied' : 'Couldn’t copy: the browser blocked clipboard access.', !ok);
+  return ok;
 }
 
 /* ============ Poem list on desktop ============ */
@@ -1602,18 +1689,19 @@ $('#logout').addEventListener('click', () => {
   store.del('st.auth'); show('login');
 });
 $('#poem').addEventListener('change', e => open(e.target.value));
-$('#copyAll').addEventListener('click', () => {
+$('#copyAll').addEventListener('click', e => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
-  copy(serialize({ ...model, interp: undefined }));   // without the additional interpretation
+  copy(serialize({ ...model, interp: undefined }), e.currentTarget, 'the poem with notes');   // without the additional interpretation
 });
 // Just the poem: title (from the title block if there is one), stanzas (the epigraph first) and date,
 // without notes or formatting
-$('#copyVerse').addEventListener('click', () => {
+$('#copyVerse').addEventListener('click', e => {
   if (!model || !model.stanzas.some(s => s.text.trim())) { toast('Nothing to copy: the poem has no text yet.', true); return; }
   const titled = kindOf(model, 0) === 'title';
   const body = model.stanzas.flatMap((s, i) => i === 0 && titled ? [] : [kindOf(model, i) ? '' : s.head || '', s.text])
     .filter(t => t && t.trim());
-  copy([titled ? model.stanzas[0].text : model.title, ...body, ...(model.date ? [model.date] : [])].join('\n\n'));
+  copy([titled ? model.stanzas[0].text : model.title, ...body, ...(model.date ? [model.date] : [])].join('\n\n'),
+    e.currentTarget, 'the verse');
 });
 $('#addDate').addEventListener('click', () => {
   if (!model) return;

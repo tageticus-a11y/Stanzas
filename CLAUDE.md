@@ -194,6 +194,12 @@ optional, long (pasted from Claude), shown collapsed
   - Conclusion «Copy»: just its text.
   - Per-stanza «Copy for Claude»: the stanza with its notes, highlights kept as
     `<mark>`.
+  - Several stanzas: clicking a stanza number (T/E for the title block and the
+    epigraph) selects it, Shift+click a range; `#selbar` at the bottom then
+    offers «Copy for Claude» (each stanza as `## Stanza N` + `stanzaForClaude`)
+    and Clear (also Esc). `selected` holds stanza objects, not indexes.
+  - Feedback: `copy(text, btn, what)` shows a toast naming what was copied and
+    turns the button into «Copied ✓» for a moment.
 - Long Other interpretations, questions and answers are cut to `CLAMP` px with
   a fade (`grow()`). They're shown in full while focused or after «Expand».
   The expanded state lives in memory and is cleared when a poem opens.
