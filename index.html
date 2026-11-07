@@ -552,7 +552,7 @@ function serialize(m) {
     const head = !kind && s.head ? ': ' + encodeField(s, 'head').replace(/\n/g, ' ') : '';
     parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)) + head, field(s, 'text'));
     // only the title block may go without «My understanding»
-    if (s.und != null || !kind) parts.push('### My understanding', field({ und: s.und || '', marks: s.marks }, 'und'));
+    if (s.und != null || !kind) parts.push('### My understanding' + (s.undHidden ? ' (hidden)' : ''), field({ und: s.und || '', marks: s.marks }, 'und'));
     s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
     s.qs.forEach((q, j) => {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
@@ -606,7 +606,10 @@ function parseMd(md, fallbackTitle) {
         let q = cur.qs[parseInt(h.replace(/^\D+/, ''), 10) - 1] || cur.qs[cur.qs.length - 1];
         if (!q) { q = { q: [], hidden: false }; cur.qs.push(q); }
         buf = q.a = [];
-      } else buf = cur[f] = cur[f] || [];   // "My understanding"
+      } else {   // "My understanding"
+        buf = cur[f] = cur[f] || [];
+        if (hidden) cur.undHidden = true;
+      }
       continue;
     }
     if (buf) buf.push(unescLine(line));
@@ -616,6 +619,7 @@ function parseMd(md, fallbackTitle) {
     setField(out, 'text', s.text); setField(out, 'und', s.und || []);
     if (s.head) setField(out, 'head', [s.head]);
     if ((s.isTitle || s.epigraph) && !s.und) out.und = null;   // optional on the title block and the epigraph
+    if (s.undHidden && out.und != null) out.undHidden = true;
     out.oths = s.oths.map(o => {
       const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o);
       if (o.by) x.by = o.by;
@@ -968,12 +972,13 @@ function renderPicker() {
 async function openFirst() {
   const last = lastUsed().key;
   const keys = Object.keys(cache.poems);
-  if (last && cache.poems[last]) return open(last);
-  if (keys.length) return open($('#poem').options[0].value);
+  if (last && cache.poems[last]) return open(last, true);
+  if (keys.length) return open($('#poem').options[0].value, true);
   current = null; model = null;
   renderEmpty('No poems yet. Tap “New” to paste the first one.');
 }
-async function open(k) {
+// scroll: go to the first stanza whose «My understanding» is empty (or stay at the top)
+async function open(k, scroll) {
   const e = cache.poems[k];
   if (!e) return;
   current = k; touch(); $('#poem').value = k;
@@ -992,6 +997,17 @@ async function open(k) {
   if (e.md == null) { model = null; renderEmpty('This poem isn’t on this device yet. Connect to the internet to open it.'); return; }
   model = parseMd(e.md, nameOf(e));
   render();
+  if (scroll) {
+    const m = model;
+    document.fonts.ready.then(() => requestAnimationFrame(() => { if (model === m) scrollToUnfinished(); }));
+  }
+}
+// Continue where you stopped: the first stanza with an empty (shown) «My understanding», just under
+// the sticky header. All filled in: the top, as the poem was probably opened for something else.
+function scrollToUnfinished() {
+  const i = model.stanzas.findIndex(s => s.und != null && !s.undHidden && !s.und.trim());
+  const art = i > 0 && $('#list').children[i];
+  window.scrollTo(0, art ? art.getBoundingClientRect().top + window.scrollY - $('header').offsetHeight : 0);
 }
 function emptyEl(msg) {
   const p = document.createElement('p'); p.className = 'empty'; p.textContent = msg;
@@ -1160,11 +1176,13 @@ function stanzaEl(s, i) {
     kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse');
   tf.classList.add('textfield');
   f.append(tf);
-  if (s.und != null) {
-    const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', kind ? [button('Remove', '', () => {
-      if (s.und && !confirm('Remove your understanding of ' + name + '? Its text will be deleted.')) return;
-      s.und = null; dropMarks(s, 'und'); changed(); render();
-    })] : []);
+  if (s.und != null && !s.undHidden) {
+    const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', [
+      button('Hide', '', () => { s.undHidden = true; changed(); render(); }),
+      ...(kind ? [button('Remove', '', () => {
+        if (s.und && !confirm('Remove your understanding of ' + name + '? Its text will be deleted.')) return;
+        s.und = null; delete s.undHidden; dropMarks(s, 'und'); changed(); render();
+      })] : [])]);
     if (finePointer.matches) und.querySelector('textarea').placeholder = 'Ctrl+Enter adds a question';
     und.classList.add('undfield');
     f.append(und);
@@ -1195,6 +1213,9 @@ function stanzaEl(s, i) {
   if (epi || (!kind && i === first && !hasEpigraph)) a.append(button(epi ? 'Not an epigraph' : 'Mark as epigraph', '', () => {
     if (epi) delete s.epigraph; else s.epigraph = true;
     changed(); render();
+  }));
+  if (s.und != null && s.undHidden) a.append(button('Show my understanding', '', () => {
+    delete s.undHidden; changed(); render(); focusField('f' + i + 'und');
   }));
   s.oths.forEach((o, j) => {
     if (o.hidden) a.append(button('Show ' + (o.by || otherLabel(s, j).toLowerCase()), '', () => {
@@ -1697,7 +1718,7 @@ $('#logout').addEventListener('click', () => {
   if (!confirm('Disconnect Dropbox on this device? Your files stay in Dropbox.')) return;
   store.del('st.auth'); show('login');
 });
-$('#poem').addEventListener('change', e => open(e.target.value));
+$('#poem').addEventListener('change', e => open(e.target.value, true));
 $('#copyAll').addEventListener('click', e => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
   copy(serialize({ ...model, interp: undefined }), e.currentTarget, 'the poem with notes');   // without the additional interpretation
@@ -1827,6 +1848,7 @@ window.addEventListener('resize', () => { document.querySelectorAll('main textar
 document.fonts.ready.then(() => alignHeads());   // the verse's width depends on the web font
 
 /* ============ Start ============ */
+history.scrollRestoration = 'manual';   // where to start is up to scrollToUnfinished
 (async function boot() {
   measureInset();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

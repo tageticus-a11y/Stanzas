@@ -123,7 +123,10 @@ optional, long (pasted from Claude), shown collapsed
   without a number goes to the last question. In memory:
   `stanza.qs = [{ q, a?, hidden, marks }]`. The legacy single `### Questions`
   becomes question 1.
-- A ` (hidden)` suffix marks a collapsed interpretation or question.
+- A ` (hidden)` suffix marks a collapsed interpretation, question or «My
+  understanding» (`stanza.undHidden`; any block, the title too). A hidden one
+  gets a «Show …» button in the stanza's actions, is skipped by Tab and by the
+  scroll on open, and is still included in copies for Claude.
 - Title block and epigraph:
   - **Title block:** `stanza.isTitle`, written as `## Title`; only allowed
     first.
@@ -208,6 +211,10 @@ optional, long (pasted from Claude), shown collapsed
   question. Tab walks the notes only: «My understanding» → the stanza's other
   interpretations, questions, answers (as shown) → next stanza's «My
   understanding», caret at the end. Shift+Tab walks back the same path.
+- Opening a poem (app start or the picker, not sync reloads) scrolls to the
+  first stanza with an empty, shown «My understanding», just under the sticky
+  header (`scrollToUnfinished`); when all are filled it stays at the top.
+  `history.scrollRestoration` is manual so the browser doesn't override it.
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.
