@@ -93,9 +93,9 @@ optional free text (authors write dates in many ways)
 
 optional, after the last stanza
 
-## Additional interpretation
+## Additional interpretation 2: Name
 
-optional, long (pasted from Claude), shown collapsed
+optional, any number, long (pasted from Claude), shown collapsed
 ```
 - One `.md` file per poem; file name = sanitized title.
 - Content lines starting with `#` are escaped as `\#` (`escLine`/`unescLine`).
@@ -140,8 +140,14 @@ optional, long (pasted from Claude), shown collapsed
     stays the poem/file title); it's prefilled from it when added. «Copy verse»
     uses it as the title.
 - Poem-level `SECTIONS` come after the last stanza: `## Date`, `## Conclusion`,
-  then `## Additional interpretation`. Any other `## ` heading starts a stanza. The
-  interpretation shows collapsed whenever a poem opens; that state isn't saved.
+  then the additional interpretations. Any other `## ` heading starts a stanza.
+- Additional interpretations: `model.interps = [{ t, by?, marks }]`, any number,
+  at the very end (`INTERP_RE`, `interpHeading`). A single one without a name is
+  written as plain `## Additional interpretation` (as older files have it);
+  otherwise `## Additional interpretation N` plus `: Name`. The name comes from the
+  same «Name» menu as other interpretations (`nameSelect`) and keeps its letter
+  case. The caption is the name, else numbered when there's more than one. All
+  show collapsed whenever a poem opens (`interpOpen`, not saved).
 - Summary is gone: `### Summary` / `### Выжимка` sections are dropped when
   read, and a 4th TSV import column is ignored.
 - Formatting is stored inline:
@@ -194,7 +200,7 @@ optional, long (pasted from Claude), shown collapsed
     on a title block or epigraph without one, My understanding.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
-  - «Copy all for Claude»: `serialize` without the additional interpretation.
+  - «Copy all for Claude»: `serialize` without the additional interpretations.
   - Conclusion «Copy»: just its text.
   - Per-stanza «Copy for Claude»: the stanza with its notes, highlights kept as
     `<mark>`.

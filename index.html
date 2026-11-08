@@ -148,6 +148,7 @@
   #palette .fmt-u { text-decoration: underline; }
   #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
 
+  #interp { display: grid; gap: 14px; }
   #date, #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
   #date:empty, #final:empty, #interp:empty { display: none; }
   /* Epigraph: italic (the backdrop must match the textarea for highlights to line up) */
@@ -446,7 +447,12 @@ typed by the user gets its preceding backslashes doubled plus one; backslashes
 right before a real tag are doubled (encodeField/decodeMarks). In memory each
 field k has range lists marks[k] (colors), marks[k + '/i'], marks[k + '/u'].
 */
-const SECTIONS = [['date', 'Date'], ['final', 'Conclusion'], ['interp', 'Additional interpretation']];
+const SECTIONS = [['date', 'Date'], ['final', 'Conclusion']];
+// Additional interpretations come last: model.interps = [{ t, by?, marks }]. «## Additional interpretation»
+// when there's one without a name (as older files have it), otherwise «## Additional interpretation N: Name»
+const INTERP_RE = /^additional interpretation(?:\s+\d+)?\s*(?::\s*(.*?))?\s*$/i;
+const interpHeading = (m, j) => 'Additional interpretation' + (m.interps.length > 1 || m.interps[j].by ? ' ' + (j + 1) : '')
+  + (m.interps[j].by ? ': ' + m.interps[j].by : '');
 // The first blocks may be a title («## Title», only first) and an epigraph («## Epigraph», first or right
 // after the title). They're labelled «T» and «E»; the stanzas after them count from 1.
 function kindOf(m, i) {
@@ -560,6 +566,7 @@ function serialize(m) {
     });
   });
   SECTIONS.forEach(([k, label]) => { if (m[k] != null) parts.push('## ' + label, field(m, k)); });
+  (m.interps || []).forEach((x, j) => parts.push('## ' + interpHeading(m, j), field(x, 't')));
   return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '') + '\n';
 }
 
@@ -572,7 +579,7 @@ function setField(o, k, lines) {
 }
 function parseMd(md, fallbackTitle) {
   let title = fallbackTitle, cur = null, buf = null, started = false;   // buf: where content lines go
-  const stanzas = [], secs = {};
+  const stanzas = [], secs = {}, interps = [];
   for (const line of md.replace(/\r/g, '').split('\n')) {
     if (!started && /^# /.test(line)) { title = line.slice(2).trim() || title; continue; }
     if (/^## /.test(line)) {
@@ -580,6 +587,8 @@ function parseMd(md, fallbackTitle) {
       const h = line.slice(3).trim().toLowerCase();
       const sec = SECTIONS.find(([, label]) => label.toLowerCase() === h);
       if (sec) { cur = null; buf = secs[sec[0]] = []; continue; }
+      const ai = INTERP_RE.exec(line.slice(3).trim());   // the name keeps its letter case
+      if (ai) { cur = null; const x = { t: [], by: ai[1] || '' }; interps.push(x); buf = x.t; continue; }
       // "## 2: II": the stanza's heading follows the colon (taken from the line itself, to keep its case)
       const colon = line.indexOf(':'), kind = colon < 0 ? h : line.slice(3, colon).trim().toLowerCase();
       cur = { text: [], und: null, oths: [], qs: [], isTitle: kind === 'title' && !stanzas.length,
@@ -637,6 +646,7 @@ function parseMd(md, fallbackTitle) {
     return out;
   }) };
   SECTIONS.forEach(([k]) => { if (secs[k]) setField(m, k, secs[k]); });
+  m.interps = interps.map(x => { const o = { t: '', marks: {} }; setField(o, 't', x.t); if (x.by) o.by = x.by; return o; });
   return m;
 }
 
@@ -982,7 +992,7 @@ async function open(k, scroll) {
   const e = cache.poems[k];
   if (!e) return;
   current = k; touch(); $('#poem').value = k;
-  interpOpen = false; expanded.clear();
+  interpOpen.clear(); expanded.clear();
   const needs = e.md == null || (!e.dirty && e.remoteRev && e.rev !== e.remoteRev);
   if (needs && navigator.onLine && e.remoteRev) {
     try {
@@ -1022,20 +1032,26 @@ function renderEmpty(msg) {
   renderSelbar();
 }
 
-let interpOpen = false;   // Additional interpretation: collapsed whenever a poem opens (not saved)
-function interpEl() {
-  const label = 'Additional interpretation';
-  const toggle = button((interpOpen ? '▾ ' : '▸ ') + label, 'toggle', () => {
-    interpOpen = !interpOpen; render();
-    if (interpOpen) $('#interp').scrollIntoView({ block: 'nearest' });
+// Additional interpretations: collapsed whenever a poem opens (which are open isn't saved)
+const interpOpen = new Set();
+const interpLabel = j => model.interps[j].by || 'Additional interpretation' + (model.interps.length > 1 ? ' ' + (j + 1) : '');
+function interpEl(x, j) {
+  const label = interpLabel(j), id = 'fai' + j, isOpen = interpOpen.has(x);
+  const toggle = button((isOpen ? '▾ ' : '▸ ') + label, 'toggle', () => {
+    if (isOpen) interpOpen.delete(x); else interpOpen.add(x);
+    render();
+    if (!isOpen) document.getElementById(id).closest('.field').scrollIntoView({ block: 'nearest' });
   });
-  toggle.setAttribute('aria-expanded', String(interpOpen));
-  const remove = button('Remove', '', () => {
-    if (model.interp && !confirm('Remove the additional interpretation? Its text will be deleted.')) return;
-    delete model.interp; dropMarks(model, 'interp'); changed(); render();
-  });
-  if (interpOpen) {
-    const el = fieldEl(model, 'interp', 'finterp', label, '', [remove]);
+  toggle.setAttribute('aria-expanded', String(isOpen));
+  const tools = [
+    nameSelect(x, label),
+    button('Remove', '', () => {
+      if (x.t && !confirm('Remove “' + label + '”? Its text will be deleted.')) return;
+      model.interps.splice(j, 1); interpOpen.delete(x); changed(); render();
+    })
+  ];
+  if (isOpen) {
+    const el = fieldEl(x, 't', id, label, '', tools);
     const l = el.querySelector('label');
     l.className = 'sr';   // the toggle shows the name; the label stays for the textarea and the palette
     l.before(toggle);
@@ -1043,10 +1059,10 @@ function interpEl() {
   }
   const wrap = document.createElement('div'); wrap.className = 'field';
   const head = document.createElement('div'); head.className = 'fhead';
-  head.append(toggle, remove);
+  head.append(toggle, ...tools);
   const p = document.createElement('p'); p.className = 'preview';
-  p.textContent = (model.interp.split('\n').find(x => x.trim()) || 'Empty').replace(/^#+\s*/, '');
-  p.addEventListener('click', () => { interpOpen = true; render(); });
+  p.textContent = (x.t.split('\n').find(t => t.trim()) || 'Empty').replace(/^#+\s*/, '');
+  p.addEventListener('click', () => { interpOpen.add(x); render(); });
   wrap.append(head, p);
   return wrap;
 }
@@ -1072,11 +1088,11 @@ function render() {
   ]));
   const ip = $('#interp');
   ip.innerHTML = '';
-  if (model.interp != null) ip.append(interpEl());
+  model.interps.forEach((x, j) => ip.append(interpEl(x, j)));
   $('#addStanza').hidden = false;
   $('#addDate').hidden = model.date != null;
   $('#addFinal').hidden = model.final != null;
-  $('#addInterp').hidden = model.interp != null;
+  $('#addInterp').hidden = false;
   document.querySelectorAll('main textarea').forEach(grow);
   alignHeads();
   renderSelbar();
@@ -1721,7 +1737,7 @@ $('#logout').addEventListener('click', () => {
 $('#poem').addEventListener('change', e => open(e.target.value, true));
 $('#copyAll').addEventListener('click', e => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
-  copy(serialize({ ...model, interp: undefined }), e.currentTarget, 'the poem with notes');   // without the additional interpretation
+  copy(serialize({ ...model, interps: [] }), e.currentTarget, 'the poem with notes');   // without the additional interpretation
 });
 // Just the poem: title (from the title block if there is one), stanzas (the epigraph first) and date,
 // without notes or formatting
@@ -1753,9 +1769,10 @@ $('#addFinal').addEventListener('click', () => {
 });
 $('#addInterp').addEventListener('click', () => {
   if (!model) return;
-  model.interp = ''; interpOpen = true;
+  const x = { t: '', marks: {} };
+  model.interps.push(x); interpOpen.add(x);
   changed(); render();
-  focusField('finterp');
+  focusField('fai' + (model.interps.length - 1));
 });
 
 const dlg = $('#newDialog');
