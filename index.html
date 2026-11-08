@@ -1194,6 +1194,10 @@ function stanzaEl(s, i) {
   f.append(tf);
   if (s.und != null && !s.undHidden) {
     const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', [
+      // one click for an unnamed other interpretation (the «+ Add» menu has it too)
+      button('+ Other interpretation', '', () => {
+        s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
+      }),
       button('Hide', '', () => { s.undHidden = true; changed(); render(); }),
       ...(kind ? [button('Remove', '', () => {
         if (s.und && !confirm('Remove your understanding of ' + name + '? Its text will be deleted.')) return;

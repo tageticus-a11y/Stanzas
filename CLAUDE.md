@@ -198,6 +198,8 @@ optional, any number, long (pasted from Claude), shown collapsed
     - Title above: on the first block, if there's no title block.
   - This stanza also offers Heading above (ordinary stanzas without one) and,
     on a title block or epigraph without one, My understanding.
+- «My understanding» has «+ Other interpretation» (adds an unnamed one and
+  focuses it) and «Hide» next to its label.
 - Copy buttons:
   - «Copy verse»: title, stanzas and date as plain text, no notes or highlights.
   - «Copy all for Claude»: `serialize` without the additional interpretations.
