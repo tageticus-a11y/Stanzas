@@ -204,6 +204,8 @@
   #viewMenu .vrow.sub { padding-left: 26px; font-size: .95rem; }
   #viewMenu .vrow.sub.off { color: var(--muted); }
   #viewMenu input { width: 18px; height: 18px; margin: 0; accent-color: var(--gas); }
+  #viewMenu .vbulk { display: flex; gap: 8px; padding: 4px 0 6px; border-bottom: 1px solid var(--rule); margin-bottom: 4px; }
+  #viewMenu .vbulk button { flex: 1; font-size: .9rem; padding: 4px 8px; }
   #viewMenu .vnote { color: var(--muted); font-size: .85rem; margin: 6px 0 2px; }
   .empty { color: var(--muted); padding: 32px 0 0; }
   .foot { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
@@ -1077,6 +1079,15 @@ function viewTypes() {
 }
 function renderViewMenu() {
   const m = $('#viewMenu'); m.textContent = '';
+  // Check or uncheck everything at once (then pick the few you want)
+  const setAll = on => () => {
+    VIEW_KINDS.forEach(([k]) => { view[k] = on; });
+    view.off = on ? [] : viewTypes().map(t => t.toLowerCase());
+    saveView(); viewBadge(); renderViewMenu(); if (model) render();
+  };
+  const bulk = document.createElement('div'); bulk.className = 'vbulk';
+  bulk.append(button('Show all', '', setAll(true)), button('Hide all', '', setAll(false)));
+  m.append(bulk);
   const row = (text, on, cls, change) => {
     const l = document.createElement('label'); l.className = 'vrow' + (cls ? ' ' + cls : '');
     const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on;
@@ -1084,7 +1095,11 @@ function renderViewMenu() {
     l.append(c, text); m.append(l);
   };
   VIEW_KINDS.forEach(([k, label]) => {
-    row(label, view[k], '', on => { view[k] = on; });
+    row(label, view[k], '', on => {
+      view[k] = on;
+      // aspects back on with every type unchecked (after «Hide all») would still show nothing
+      if (k === 'asp' && on && viewTypes().every(t => view.off.includes(t.toLowerCase()))) view.off = [];
+    });
     if (k === 'asp') viewTypes().forEach(t => row(t || 'No type', !view.off.includes(t.toLowerCase()), 'sub' + (view.asp ? '' : ' off'), on => {
       view.off = view.off.filter(x => x !== t.toLowerCase());
       if (!on) view.off.push(t.toLowerCase());

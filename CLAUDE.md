@@ -240,6 +240,8 @@ optional, any number, long (pasted from Claude), shown collapsed
   for every poem: Verse (text and heading), Aspects (and each type), My
   understanding, Other interpretations, Questions, Additional interpretations.
   Saved per device in `st.view` (`off` = hidden aspect types, lowercased).
+  «Show all» / «Hide all» at the top set every box; ticking Aspects when all its
+  types are off turns the types back on.
   Hidden kinds aren't rendered (so Tab skips them) but stay in files and copies.
   Adding a block of a hidden kind shows that kind again (`reveal`). With the
   verse hidden the notes take the wide column (`.no-text`).
