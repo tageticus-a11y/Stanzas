@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#EDF0F3" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#151C24" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,6 +23,7 @@
     --rule: #D2D9E0; --gas: #A8661A; --on-gas: #FFFFFF; --error: #B3402F;
     --hl-yellow: rgba(255, 210, 0, .45); --hl-green: rgba(60, 190, 100, .32); --hl-blue: rgba(60, 140, 255, .28);
     --hl-pink: rgba(255, 80, 140, .28); --hl-violet: rgba(140, 90, 255, .28);
+    --asp: #1F7A78; --asp-bg: #E3F2F1; --asp-line: #9FD0CC;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -31,6 +32,7 @@
       --rule: #2D3A47; --gas: #E5AA52; --on-gas: #1B1206; --error: #E0705E;
       --hl-yellow: rgba(230, 190, 40, .38); --hl-green: rgba(70, 190, 110, .36); --hl-blue: rgba(80, 150, 255, .4);
       --hl-pink: rgba(255, 90, 150, .36); --hl-violet: rgba(160, 110, 255, .42);
+      --asp: #62C7C1; --asp-bg: #17302F; --asp-line: #2B5754;
       color-scheme: dark;
     }
   }
@@ -84,7 +86,8 @@
   #sync { font-size: .82rem; color: var(--muted); flex-basis: 100%; }
   @media (min-width: 700px) { #sync { flex-basis: auto; margin-left: 4px; } }
 
-  main { max-width: 1200px; margin: 0 auto;
+  /* overflow-x: clip: nothing can widen the page sideways (unlike hidden, it keeps the sticky header working) */
+  main { max-width: 1200px; margin: 0 auto; overflow-x: clip;
     padding: 4px 16px calc(96px + env(safe-area-inset-bottom, 0px)); }
   .stanza { display: grid; grid-template-columns: 1.6rem 1fr; column-gap: 10px;
     padding: 20px 0; border-bottom: 1px solid var(--rule); }
@@ -185,6 +188,23 @@
   textarea.verse.head, textarea.verse.head:focus { padding-left: 28px; padding-right: 28px; }
   .hl.verse.head .backdrop, .hl.verse.head:focus-within .backdrop {
     padding-left: calc(28px + var(--ti, 0px)); padding-right: calc(28px + var(--ti, 0px)); }
+  /* The verse column: the text, then its aspects */
+  .textfield { display: grid; gap: 10px; min-width: 0; }
+  /* Aspects (scene, place, zoom…): a teal card with a rule on the left, unlike any other block */
+  .aspect .fhead label { color: var(--asp); font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .aspect .hl { background: var(--asp-bg); box-shadow: inset 3px 0 0 var(--asp); }
+  .aspect textarea, .aspect textarea:focus { border-color: var(--asp-line); }
+  .aspect .backdrop, .aspect textarea { padding-left: 14px; }
+  .aspect .backdrop { padding-left: calc(14px + var(--ti, 0px)); }
+  #viewBtn.filtered { border-color: var(--gas); color: var(--gas); }
+  #viewMenu { position: fixed; z-index: 20; width: min(18rem, calc(100vw - 24px)); max-height: 75vh; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25); }
+  #viewMenu .vrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; margin: 0; font-size: 1rem; color: var(--ink); cursor: pointer; }
+  #viewMenu .vrow.sub { padding-left: 26px; font-size: .95rem; }
+  #viewMenu .vrow.sub.off { color: var(--muted); }
+  #viewMenu input { width: 18px; height: 18px; margin: 0; accent-color: var(--gas); }
+  #viewMenu .vnote { color: var(--muted); font-size: .85rem; margin: 6px 0 2px; }
   .empty { color: var(--muted); padding: 32px 0 0; }
   .foot { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
   .foot .muted { color: var(--muted); font-size: .85rem; flex-basis: 100%; }
@@ -195,6 +215,7 @@
     .actions { grid-column: 1 / -1; }
     .headfield { grid-column: 1; }
     .fields.has-head > .textfield, .fields.has-head > .undfield { grid-row: 2; }
+    .fields.no-text { grid-template-columns: 1.3fr 1fr; }   /* verse hidden: the notes take the wide column */
     .extra { grid-column: 1 / -1; }   /* narrow landscape: other interpretations and questions below */
   }
   @media (min-width: 900px) {
@@ -254,6 +275,7 @@
     <button type="button" id="copyVerse">Copy verse</button>
     <button type="button" id="copyAll">Copy all for Claude</button>
     <button type="button" id="newPoem">New</button>
+    <button type="button" id="viewBtn" aria-haspopup="true" aria-expanded="false" title="Show or hide the verse and kinds of notes">View</button>
     <span id="sync" role="status" aria-live="polite"></span>
   </header>
   <main>
@@ -273,6 +295,8 @@
 </div>
 
 <div id="toast" role="alert"></div>
+
+<div id="viewMenu" hidden></div>
 
 <div id="selbar" hidden>
   <span id="selCount"></span>
@@ -317,7 +341,7 @@
 <dialog id="namesDialog">
   <form method="dialog" id="namesForm">
     <h2 id="namesTitle">Interpreters</h2>
-    <label for="namesText">One name per line</label>
+    <label for="namesText">One per line</label>
     <textarea id="namesText"></textarea>
     <p class="hint" id="namesHint"></p>
     <div class="row">
@@ -468,7 +492,7 @@ function stanzaNo(m, i) {
   return k === 'title' ? 'T' : k === 'epigraph' ? 'E' : String(i - specials(m) + 1);
 }
 // ### heading → field; null drops the section's lines
-const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'o'], [/^question/, 'q'], [/^answer/, 'a'],
+const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'o'], [/^question/, 'q'], [/^answer/, 'a'], [/^aspect/, 'p'],
   [/^(summary|выжим)/, null]];
 const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 
@@ -546,7 +570,9 @@ function dropMarks(o, k) { delete o.marks[k]; delete o.marks[k + '/i']; delete o
 
 // oths: [{ o, hidden, marks }], qs: [{ q, a?, hidden, marks }]: each carries its own highlights,
 // so fieldEl works on it
-const newStanza = (text, und) => ({ text: text || '', und: und || '', marks: {}, oths: [], qs: [] });
+const newStanza = (text, und) => ({ text: text || '', und: und || '', marks: {}, asps: [], oths: [], qs: [] });
+// An aspect: what a stanza says about one thread followed through the poem (place, zoom…); by = its type
+const newAspect = type => Object.assign({ a: '', marks: {} }, type ? { by: type } : {});
 const newOther = () => ({ o: '', hidden: false, marks: {} });
 const newQuestion = () => ({ q: '', hidden: false, marks: {} });
 
@@ -557,6 +583,7 @@ function serialize(m) {
     const kind = kindOf(m, i);
     const head = !kind && s.head ? ': ' + encodeField(s, 'head').replace(/\n/g, ' ') : '';
     parts.push('## ' + (kind === 'title' ? 'Title' : kind === 'epigraph' ? 'Epigraph' : stanzaNo(m, i)) + head, field(s, 'text'));
+    (s.asps || []).forEach((x, j) => parts.push('### Aspect ' + (j + 1) + (x.by ? ': ' + x.by : ''), field(x, 'a')));
     // only the title block may go without «My understanding»
     if (s.und != null || !kind) parts.push('### My understanding' + (s.undHidden ? ' (hidden)' : ''), field({ und: s.und || '', marks: s.marks }, 'und'));
     s.oths.forEach((o, j) => parts.push('### Other interpretation ' + (j + 1) + (o.by ? ': ' + o.by : '') + (o.hidden ? ' (hidden)' : ''), field(o, 'o')));
@@ -591,7 +618,7 @@ function parseMd(md, fallbackTitle) {
       if (ai) { cur = null; const x = { t: [], by: ai[1] || '' }; interps.push(x); buf = x.t; continue; }
       // "## 2: II": the stanza's heading follows the colon (taken from the line itself, to keep its case)
       const colon = line.indexOf(':'), kind = colon < 0 ? h : line.slice(3, colon).trim().toLowerCase();
-      cur = { text: [], und: null, oths: [], qs: [], isTitle: kind === 'title' && !stanzas.length,
+      cur = { text: [], und: null, asps: [], oths: [], qs: [], isTitle: kind === 'title' && !stanzas.length,
         epigraph: kind === 'epigraph' && (!stanzas.length || (stanzas.length === 1 && stanzas[0].isTitle)) };
       if (colon >= 0 && !cur.isTitle && !cur.epigraph) cur.head = line.slice(colon + 1).trim();
       stanzas.push(cur); buf = cur.text; continue;
@@ -610,6 +637,11 @@ function parseMd(md, fallbackTitle) {
         const o = { o: [], hidden, by: by ? by[1] : '' }; cur.oths.push(o); buf = o.o;
       }
       else if (f === 'q') { const q = { q: [], hidden }; cur.qs.push(q); buf = q.q; }
+      else if (f === 'p') {
+        // "Aspect 2: Place": the type keeps its letter case, so take it from the line itself
+        const by = /^[^:]*:\s*(.*?)\s*$/.exec(line.slice(4).trim().replace(/\s*\(hidden\)$/i, ''));
+        const x = { a: [], by: by ? by[1] : '' }; cur.asps.push(x); buf = x.a;
+      }
       else if (f === 'a') {
         // "Answer N" belongs to question N; without a number, to the last question
         let q = cur.qs[parseInt(h.replace(/^\D+/, ''), 10) - 1] || cur.qs[cur.qs.length - 1];
@@ -629,6 +661,7 @@ function parseMd(md, fallbackTitle) {
     if (s.head) setField(out, 'head', [s.head]);
     if ((s.isTitle || s.epigraph) && !s.und) out.und = null;   // optional on the title block and the epigraph
     if (s.undHidden && out.und != null) out.undHidden = true;
+    out.asps = s.asps.map(x => { const o = newAspect(x.by); setField(o, 'a', x.a); return o; });
     out.oths = s.oths.map(o => {
       const x = newOther(); x.hidden = o.hidden; setField(x, 'o', o.o);
       if (o.by) x.by = o.by;
@@ -764,7 +797,7 @@ async function listRemote() {
   return {
     files: all.filter(x => x['.tag'] === 'file' && /\.md$/i.test(x.name))
       .map(x => ({ path: x.path_display, rev: x.rev, mod: x.server_modified })),
-    lists: all.filter(x => x['.tag'] === 'file' && x.name.toLowerCase() === NAMES_FILE)
+    lists: all.filter(x => x['.tag'] === 'file' && (x.name.toLowerCase() === NAMES_FILE || x.path_lower === '/' + ASPECTS_FILE))
       .map(x => ({ path: x.path_display, rev: x.rev })),
     folders: all.filter(x => x['.tag'] === 'folder').map(x => x.path_display).sort((a, b) => a.localeCompare(b))
   };
@@ -827,6 +860,9 @@ function allFolders() {
 
 /* ============ Interpreter names ============ */
 const NAMES_FILE = '_interpreters.txt';
+// Aspect types: one list for every poem, _aspects.txt in the app folder root, kept in cache.names[ASPECTS_KEY]
+const ASPECTS_FILE = '_aspects.txt', ASPECTS_KEY = '#aspects';   // folder keys start with '/' or are '', so no clash
+const listKey = path => path.toLowerCase() === '/' + ASPECTS_FILE ? ASPECTS_KEY : folderOf({ path }).toLowerCase();
 // One name per line; blank lines and repeats (in any letter case) dropped, the first spelling kept
 const parseNames = t => t.replace(/\r/g, '').split('\n').map(n => n.replace(/\s+/g, ' ').trim())
   .filter((n, i, all) => n && all.findIndex(x => x.toLowerCase() === n.toLowerCase()) === i);
@@ -835,7 +871,7 @@ async function syncNames(lists) {
   const names = cache.names = cache.names || {}, seen = new Set();
   let diff = false;
   for (const r of lists) {
-    const k = folderOf(r).toLowerCase(); seen.add(k);
+    const k = listKey(r.path); seen.add(k);
     if (names[k] && names[k].rev === r.rev) { names[k].path = r.path; continue; }
     const d = await download(r.path);
     names[k] = { path: r.path, rev: d.rev || r.rev, list: parseNames(d.text) }; diff = true;
@@ -854,6 +890,7 @@ function levels() {
 const listAt = f => ((cache.names || {})[f.toLowerCase()] || {}).list || [];
 // Names for the open poem from every level that has a list, nearest first
 const namesHere = () => parseNames(levels().flatMap(listAt).join('\n'));
+const aspectTypes = () => listAt(ASPECTS_KEY);
 // The «+ Claude» name: the first name of the list closest to the root
 const quickName = () => levels().reverse().map(listAt).filter(l => l.length).map(l => l[0])[0] || null;
 
@@ -1012,10 +1049,105 @@ async function open(k, scroll) {
     document.fonts.ready.then(() => requestAnimationFrame(() => { if (model === m) scrollToUnfinished(); }));
   }
 }
+/* ============ View: show or hide whole kinds of blocks ============
+   Per device (st.view). off: lowercased aspect types that are hidden ('' = aspects without a type). */
+const VIEW_KINDS = [['verse', 'Verse'], ['asp', 'Aspects'], ['und', 'My understanding'], ['oth', 'Other interpretations'],
+  ['q', 'Questions'], ['add', 'Additional interpretations']];
+const view = Object.assign({ verse: true, asp: true, und: true, oth: true, q: true, add: true, off: [] }, store.get('st.view') || {});
+const saveView = () => store.set('st.view', view);
+const aspShown = x => view.asp && !view.off.includes((x.by || '').toLowerCase());
+// Adding something of a hidden kind shows that kind again, so the new block doesn't vanish
+function reveal(kind, type) {
+  view[kind] = true;
+  if (type !== undefined) view.off = view.off.filter(t => t !== (type || '').toLowerCase());
+  saveView(); viewBadge();
+}
+function viewBadge() {
+  const n = VIEW_KINDS.filter(([k]) => !view[k]).length + (view.asp ? view.off.length : 0);
+  $('#viewBtn').classList.toggle('filtered', n > 0);
+  $('#viewBtn').textContent = n ? 'View · ' + n + ' hidden' : 'View';
+}
+// Types to offer in the menu: the list's, then any others used in this poem; '' for aspects without a type
+function viewTypes() {
+  const out = [...aspectTypes()];
+  const has = t => out.some(x => x.toLowerCase() === t.toLowerCase());
+  let untyped = false;
+  (model ? model.stanzas : []).forEach(s => (s.asps || []).forEach(x => { if (!x.by) untyped = true; else if (!has(x.by)) out.push(x.by); }));
+  return untyped ? [...out, ''] : out;
+}
+function renderViewMenu() {
+  const m = $('#viewMenu'); m.textContent = '';
+  const row = (text, on, cls, change) => {
+    const l = document.createElement('label'); l.className = 'vrow' + (cls ? ' ' + cls : '');
+    const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on;
+    c.addEventListener('change', () => { change(c.checked); saveView(); viewBadge(); renderViewMenu(); if (model) render(); });
+    l.append(c, text); m.append(l);
+  };
+  VIEW_KINDS.forEach(([k, label]) => {
+    row(label, view[k], '', on => { view[k] = on; });
+    if (k === 'asp') viewTypes().forEach(t => row(t || 'No type', !view.off.includes(t.toLowerCase()), 'sub' + (view.asp ? '' : ' off'), on => {
+      view.off = view.off.filter(x => x !== t.toLowerCase());
+      if (!on) view.off.push(t.toLowerCase());
+      else view.asp = true;
+    }));
+  });
+  const note = document.createElement('p'); note.className = 'vnote';
+  note.textContent = 'Hidden blocks are only out of sight: they stay in the file and in copies for Claude.';
+  const edit = button('Edit aspect types…', 'quiet', () => { closeViewMenu(); editNames(ASPECTS_KEY); });
+  m.append(note, edit);
+}
+function openViewMenu() {
+  renderViewMenu();
+  const m = $('#viewMenu'), r = $('#viewBtn').getBoundingClientRect();
+  m.hidden = false;
+  m.style.top = r.bottom + 6 + 'px';
+  m.style.left = Math.max(12, Math.min(r.right - m.offsetWidth, window.innerWidth - m.offsetWidth - 12)) + 'px';
+  $('#viewBtn').setAttribute('aria-expanded', 'true');
+}
+function closeViewMenu() { $('#viewMenu').hidden = true; $('#viewBtn').setAttribute('aria-expanded', 'false'); }
+$('#viewBtn').addEventListener('click', () => $('#viewMenu').hidden ? openViewMenu() : closeViewMenu());
+document.addEventListener('pointerdown', e => {
+  if (!$('#viewMenu').hidden && !$('#viewMenu').contains(e.target) && e.target !== $('#viewBtn')) closeViewMenu();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#viewMenu').hidden) { closeViewMenu(); $('#viewBtn').focus(); } });
+window.addEventListener('resize', closeViewMenu);
+viewBadge();
+
+// «Type» menu of an aspect: types from _aspects.txt, a one-off type, no type, edit the list
+function typeSelect(x, label) {
+  const sel = document.createElement('select');
+  sel.setAttribute('aria-label', 'Type of “' + label + '”');
+  const opt = (parent, v, text) => { const o = document.createElement('option'); o.value = v; o.textContent = text; parent.append(o); };
+  const group = text => { const g = document.createElement('optgroup'); g.label = text; sel.append(g); return g; };
+  opt(sel, '', 'Type');
+  const types = aspectTypes(), cur = (x.by || '').toLowerCase();
+  if (types.length) { const g = group('Types'); types.forEach(t => opt(g, 't:' + t, (t.toLowerCase() === cur ? '✓ ' : '') + t)); }
+  const g = group('Other');
+  opt(g, 'other', 'Other type…');
+  if (x.by) opt(g, 'none', 'No type');
+  opt(group('List'), 'edit', 'Edit aspect types…');
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    sel.value = '';
+    if (v === 'edit') { editNames(ASPECTS_KEY); return; }
+    if (v.startsWith('t:')) x.by = v.slice(2);
+    else if (v === 'none') delete x.by;
+    else if (v === 'other') {
+      const t = prompt('What does this aspect follow? For example: place, time, zoom.', x.by || '');
+      if (t === null) return;
+      const by = t.replace(/\s+/g, ' ').trim();
+      if (by) x.by = by; else delete x.by;
+    } else return;
+    if (x.by) reveal('asp', x.by);
+    changed(); render();
+  });
+  return sel;
+}
+
 // Continue where you stopped: the first stanza with an empty (shown) «My understanding», just under
 // the sticky header. All filled in: the top, as the poem was probably opened for something else.
 function scrollToUnfinished() {
-  const i = model.stanzas.findIndex(s => s.und != null && !s.undHidden && !s.und.trim());
+  const i = view.und ? model.stanzas.findIndex(s => s.und != null && !s.undHidden && !s.und.trim()) : -1;
   const art = i > 0 && $('#list').children[i];
   window.scrollTo(0, art ? art.getBoundingClientRect().top + window.scrollY - $('header').offsetHeight : 0);
 }
@@ -1088,7 +1220,7 @@ function render() {
   ]));
   const ip = $('#interp');
   ip.innerHTML = '';
-  model.interps.forEach((x, j) => ip.append(interpEl(x, j)));
+  if (view.add) model.interps.forEach((x, j) => ip.append(interpEl(x, j)));
   $('#addStanza').hidden = false;
   $('#addDate').hidden = model.date != null;
   $('#addFinal').hidden = model.final != null;
@@ -1115,7 +1247,8 @@ function alignHeads(root) {
     if (!tr.width || !hr.width) return;
     // wide enough for the heading itself (and something to click when it's empty)
     const pad = 28, w = Math.min(hr.width + pad, Math.max(tr.width, own + 8, 60) + 2 * pad);
-    const ml = Math.max(-pad, tr.left - hr.left + tr.width / 2 - w / 2);
+    // never past the column's right edge (on a phone that would widen the page)
+    const ml = Math.min(hr.width - w, Math.max(-pad, tr.left - hr.left + tr.width / 2 - w / 2));
     h.style.width = w + 'px'; h.style.marginLeft = ml + 'px';
   });
 }
@@ -1179,7 +1312,7 @@ function stanzaEl(s, i) {
   num.addEventListener('click', e => toggleSelect(i, e.shiftKey));
   const f = document.createElement('div'); f.className = 'fields';
   if (s.und == null && !kind) s.und = '';
-  if (!kind && s.head != null) {
+  if (!kind && s.head != null && view.verse) {
     const h = fieldEl(s, 'head', 'f' + i + 'head', 'Heading of ' + name, 'verse head', [
       button('×', '', () => { delete s.head; dropMarks(s, 'head'); changed(); render(); })]);
     h.classList.add('headfield');
@@ -1188,15 +1321,26 @@ function stanzaEl(s, i) {
     h.querySelector('textarea').addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
     f.append(h); f.classList.add('has-head');
   }
-  const tf = fieldEl(s, 'text', 'f' + i + 'text', kind === 'title' ? 'Title' : epi ? 'Epigraph' : 'Text',
-    kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse');
-  tf.classList.add('textfield');
-  f.append(tf);
-  if (s.und != null && !s.undHidden) {
+  // The verse column: the text, then the aspects under it
+  const col = document.createElement('div'); col.className = 'textfield';
+  if (view.verse) col.append(fieldEl(s, 'text', 'f' + i + 'text', kind === 'title' ? 'Title' : epi ? 'Epigraph' : 'Text',
+    kind === 'title' ? 'verse ttl' : epi ? 'verse epi' : 'verse'));
+  s.asps.forEach((x, j) => {
+    if (!aspShown(x)) return;
+    const label = x.by || 'Aspect';
+    const el = fieldEl(x, 'a', 'f' + i + 'p' + j, '◆ ' + label, '', [typeSelect(x, label), button('Remove', '', () => {
+      if (x.a && !confirm('Remove the aspect “' + label + '” from ' + name + '? Its text will be deleted.')) return;
+      s.asps.splice(j, 1); changed(); render();
+    })], true);
+    el.classList.add('aspect');
+    col.append(el);
+  });
+  if (col.children.length) f.append(col); else f.classList.add('no-text');
+  if (s.und != null && !s.undHidden && view.und) {
     const und = fieldEl(s, 'und', 'f' + i + 'und', 'My understanding', '', [
       // one click for an unnamed other interpretation (the «+ Add» menu has it too)
       button('+ Other interpretation', '', () => {
-        s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
+        s.oths.push(newOther()); reveal('oth'); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
       }),
       button('Hide', '', () => { s.undHidden = true; changed(); render(); }),
       ...(kind ? [button('Remove', '', () => {
@@ -1208,8 +1352,8 @@ function stanzaEl(s, i) {
     f.append(und);
   }
 
-  const shownOths = s.oths.map((o, j) => [o, j]).filter(([o]) => !o.hidden);
-  const shownQs = s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden);
+  const shownOths = view.oth ? s.oths.map((o, j) => [o, j]).filter(([o]) => !o.hidden) : [];
+  const shownQs = view.q ? s.qs.map((q, j) => [q, j]).filter(([q]) => !q.hidden) : [];
   if (shownOths.length || shownQs.length) {
     f.classList.add('has-extra');
     const ex = document.createElement('div'); ex.className = 'extra';
@@ -1234,15 +1378,15 @@ function stanzaEl(s, i) {
     if (epi) delete s.epigraph; else s.epigraph = true;
     changed(); render();
   }));
-  if (s.und != null && s.undHidden) a.append(button('Show my understanding', '', () => {
+  if (s.und != null && s.undHidden && view.und) a.append(button('Show my understanding', '', () => {
     delete s.undHidden; changed(); render(); focusField('f' + i + 'und');
   }));
-  s.oths.forEach((o, j) => {
+  if (view.oth) s.oths.forEach((o, j) => {
     if (o.hidden) a.append(button('Show ' + (o.by || otherLabel(s, j).toLowerCase()), '', () => {
       o.hidden = false; changed(); render(); focusField('f' + i + 'o' + j);
     }));
   });
-  s.qs.forEach((q, j) => {
+  if (view.q) s.qs.forEach((q, j) => {
     if (q.hidden) a.append(button('Show Q' + no + '.' + (j + 1), '', () => {
       q.hidden = false; changed(); render(); focusField('f' + i + 'q' + j);
     }));
@@ -1256,6 +1400,9 @@ function stanzaEl(s, i) {
   if (s.und == null) opt(cols, 'und', 'My understanding');
   opt(cols, 'q', 'Question'); opt(cols, 'o', 'Other interpretation');
   if (!kind && s.head == null) opt(cols, 'head', 'Heading above');
+  const ag = document.createElement('optgroup'); ag.label = 'Aspect';
+  aspectTypes().forEach(t => opt(ag, 'p:' + t, t));
+  opt(ag, 'p:', aspectTypes().length ? 'Without a type' : 'Aspect');
   // A stanza that is really a heading («II», «----») becomes the heading of the next one
   const next = model.stanzas[i + 1];
   if (!kind && next && !kindOf(model, i + 1) && next.head == null) opt(cols, 'tohead', 'Make it the heading below');
@@ -1265,15 +1412,20 @@ function stanzaEl(s, i) {
   if (!(kind === 'title' && hasEpigraph)) opt(st, 'below', 'Stanza below');
   if (!kind && i === first && !hasEpigraph) opt(st, 'epigraph', 'Epigraph above');
   if (i === 0 && kind !== 'title') opt(st, 'title', 'Title above');
-  add.append(cols);
+  add.append(cols, ag);
   if (st.children.length) add.append(st);
   add.addEventListener('change', () => {
     const v = add.value;
     if (v === 'q') addQuestion(s, i);
-    else if (v === 'und') { s.und = ''; changed(); render(); focusField('f' + i + 'und'); }
-    else if (v === 'head') { s.head = ''; changed(); render(); focusField('f' + i + 'head'); }
+    else if (v === 'und') { s.und = ''; reveal('und'); changed(); render(); focusField('f' + i + 'und'); }
+    else if (v === 'head') { s.head = ''; reveal('verse'); changed(); render(); focusField('f' + i + 'head'); }
+    else if (v.startsWith('p:')) {
+      const t = v.slice(2);
+      s.asps.push(newAspect(t)); reveal('asp', t);
+      changed(); render(); focusField('f' + i + 'p' + (s.asps.length - 1));
+    }
     else if (v === 'tohead') {
-      const notes = (s.und || '').trim() || s.oths.some(o => o.o.trim()) || s.qs.some(q => q.q.trim() || (q.a || '').trim());
+      const notes = (s.und || '').trim() || s.asps.some(x => x.a.trim()) || s.oths.some(o => o.o.trim()) || s.qs.some(q => q.q.trim() || (q.a || '').trim());
       if (notes && !confirm('Make ' + name + ' the heading of the next stanza? Its notes will be deleted.')) { add.value = ''; return; }
       // one line: newlines become spaces (same length, so the formatting stays put), then trim
       const flat = s.text.replace(/\n/g, ' '), from = flat.length - flat.trimStart().length, to = flat.trimEnd().length;
@@ -1286,7 +1438,7 @@ function stanzaEl(s, i) {
       expanded.clear();
       changed(); render(); focusField('f' + i + 'head');
     }
-    else if (v === 'o') { s.oths.push(newOther()); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
+    else if (v === 'o') { s.oths.push(newOther()); reveal('oth'); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
     else if (v === 'above' || v === 'below' || v === 'epigraph' || v === 'title') {
       const at = v === 'below' ? i + 1 : v === 'title' ? 0 : i;
       const ns = newStanza(v === 'title' ? model.title : '');
@@ -1294,14 +1446,14 @@ function stanzaEl(s, i) {
       if (v === 'title') { ns.isTitle = true; ns.und = null; }
       model.stanzas.splice(at, 0, ns);
       expanded.clear();   // field ids move with the stanzas
-      changed(); render(); focusField('f' + at + 'text');
+      reveal('verse'); changed(); render(); focusField('f' + at + 'text');
     }
   });
   a.append(add);
   // One click for the usual interpreter (the first name of the list closest to the root)
   const qn = quickName();
   if (qn) a.append(button('+ ' + qn, '', () => {
-    const o = newOther(); o.by = qn; s.oths.push(o);
+    const o = newOther(); o.by = qn; s.oths.push(o); reveal('oth');
     changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1));
   }));
   const gap = document.createElement('span'); gap.className = 'grow';
@@ -1316,6 +1468,7 @@ function stanzaEl(s, i) {
 function stanzaForClaude(i) {
   const s = model.stanzas[i], kind = kindOf(model, i), no = stanzaNo(model, i), val = (o, k) => encodeField(o, k);
   let t = (!kind && s.head ? val(s, 'head') + '\n\n' : '') + val(s, 'text');
+  (s.asps || []).forEach(x => { if (x.a) t += '\n\nAspect' + (x.by ? ' (' + x.by + ')' : '') + ':\n' + val(x, 'a'); });
   if (s.und != null) t += '\n\nMy understanding:\n' + (s.und ? val(s, 'und') : '—');
   s.oths.forEach((o, j) => {
     if (o.o) t += '\n\n' + (o.by ? 'Other interpretation (' + o.by + ')' : otherLabel(s, j)) + ':\n' + val(o, 'o');
@@ -1430,7 +1583,7 @@ function questionEl(s, i, q, j) {
   return box;
 }
 function addQuestion(s, i) {
-  s.qs.push(newQuestion());
+  s.qs.push(newQuestion()); reveal('q');
   changed(); render();
   focusField('f' + i + 'q' + (s.qs.length - 1));
 }
@@ -1774,7 +1927,7 @@ $('#addFinal').addEventListener('click', () => {
 $('#addInterp').addEventListener('click', () => {
   if (!model) return;
   const x = { t: '', marks: {} };
-  model.interps.push(x); interpOpen.add(x);
+  model.interps.push(x); interpOpen.add(x); reveal('add');
   changed(); render();
   focusField('fai' + (model.interps.length - 1));
 });
@@ -1830,12 +1983,18 @@ $('#newForm').addEventListener('submit', async ev => {
 // Editing an interpreter list: saved to Dropbox right away as <folder>/_interpreters.txt
 const namesDlg = $('#namesDialog');
 let namesFolder = '';
+// folder: the interpreter list of that folder, or ASPECTS_KEY for the aspect types
 function editNames(folder) {
   namesFolder = folder;
-  $('#namesTitle').textContent = 'Interpreters: ' + (folder ? folderLabel(folder) : 'all poets');
-  $('#namesHint').textContent = (folder ? 'Offered for poems in ' + folderLabel(folder) + ' and its subfolders.'
-    : 'Offered for every poem. The first name gets its own «+» button on each stanza.') +
-    ' Saved in Dropbox as ' + (folder ? folder.slice(1) + '/' : '') + NAMES_FILE + '.';
+  if (folder === ASPECTS_KEY) {
+    $('#namesTitle').textContent = 'Aspect types';
+    $('#namesHint').textContent = 'What you follow through a poem: place, time, zoom… Offered for every poem, one per line. Saved in Dropbox as ' + ASPECTS_FILE + '.';
+  } else {
+    $('#namesTitle').textContent = 'Interpreters: ' + (folder ? folderLabel(folder) : 'all poets');
+    $('#namesHint').textContent = (folder ? 'Offered for poems in ' + folderLabel(folder) + ' and its subfolders.'
+      : 'Offered for every poem. The first name gets its own «+» button on each stanza.') +
+      ' Saved in Dropbox as ' + (folder ? folder.slice(1) + '/' : '') + NAMES_FILE + '.';
+  }
   $('#namesText').value = listAt(folder).join('\n');
   if (!namesDlg.open) namesDlg.showModal();
   $('#namesText').focus();
@@ -1846,7 +2005,7 @@ $('#namesForm').addEventListener('submit', async ev => {
   if (!navigator.onLine) { toast('You’re offline. Connect to the internet and save the list again.', true); return; }
   const k = namesFolder.toLowerCase(), old = (cache.names || {})[k], list = parseNames($('#namesText').value);
   try {
-    const r = await upload(old ? old.path : namesFolder + '/' + NAMES_FILE, list.join('\n') + (list.length ? '\n' : ''), old ? old.rev : null);
+    const r = await upload(old ? old.path : namesFolder === ASPECTS_KEY ? '/' + ASPECTS_FILE : namesFolder + '/' + NAMES_FILE, list.join('\n') + (list.length ? '\n' : ''), old ? old.rev : null);
     (cache.names = cache.names || {})[k] = { path: r.path_display, rev: r.rev, list };
     saveCache(); namesDlg.close();
     if (model) render();

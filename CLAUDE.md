@@ -69,6 +69,10 @@ optional: only the first stanza can be one; the stanzas after it count from 1
 
 verse lines
 
+### Aspect 1: Place
+
+optional, any number: one thread followed through the poem (place, zoom…)
+
 ### My understanding
 
 notes
@@ -110,6 +114,15 @@ optional, any number, long (pasted from Claude), shown collapsed
   its formatting and dropping its notes after a confirm. It takes its own grid row
   (text, «My understanding» and the number start level below it) and `alignHeads()`
   centres it over the verse's widest line. «Copy verse» includes it.
+- Aspects: `### Aspect N: Type` right after the verse, in memory
+  `stanza.asps = [{ a, by?, marks }]` (`by` = the type, letter case kept from
+  the line). Types come from one list, `_aspects.txt` in the app folder root
+  (no per-folder lists), kept in `cache.names[ASPECTS_KEY]` and edited in the
+  same dialog as interpreter lists (`editNames(ASPECTS_KEY)`). «+ Add → Aspect»
+  offers each type and «Without a type»; each aspect has a «Type» menu
+  (`typeSelect`). Shown under the verse in the verse column (`.textfield`) as a
+  teal card (`--asp*` colours). Copies for Claude include them as
+  «Aspect (Type):».
 - Other interpretations: any number of `### Other interpretation N` per
   stanza, in memory `stanza.oths = [{ o, by?, hidden, marks }]`. `by` is the
   interpreter's name (the «Name» menu), written after a colon in the heading
@@ -223,6 +236,16 @@ optional, any number, long (pasted from Claude), shown collapsed
   first stanza with an empty, shown «My understanding», just under the sticky
   header (`scrollToUnfinished`); when all are filled it stays at the top.
   `history.scrollRestoration` is manual so the browser doesn't override it.
+- View menu (header «View»): checkboxes to show or hide whole kinds of blocks
+  for every poem: Verse (text and heading), Aspects (and each type), My
+  understanding, Other interpretations, Questions, Additional interpretations.
+  Saved per device in `st.view` (`off` = hidden aspect types, lowercased).
+  Hidden kinds aren't rendered (so Tab skips them) but stay in files and copies.
+  Adding a block of a hidden kind shows that kind again (`reveal`). With the
+  verse hidden the notes take the wide column (`.no-text`).
+- iPhone: the viewport has `maximum-scale=1`, because Safari zooms into any
+  field or select under 16px on focus and the page then pans sideways; `main`
+  has `overflow-x: clip` (not hidden, so the sticky header keeps working).
 - Error messages say what happened and what to do next.
 - **Bump `CACHE` in `sw.js` (stanzas-vN) on every change to app files**,
   otherwise installed phones keep the old version.
