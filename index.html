@@ -23,7 +23,8 @@
     --rule: #D2D9E0; --gas: #A8661A; --on-gas: #FFFFFF; --error: #B3402F;
     --hl-yellow: rgba(255, 210, 0, .45); --hl-green: rgba(60, 190, 100, .32); --hl-blue: rgba(60, 140, 255, .28);
     --hl-pink: rgba(255, 80, 140, .28); --hl-violet: rgba(140, 90, 255, .28);
-    --asp: #1F7A78; --asp-bg: #E3F2F1; --asp-line: #9FD0CC;
+    --ac-teal: #1F7A78; --ac-blue: #2F62B8; --ac-violet: #7048B8; --ac-pink: #B23A72;
+    --ac-amber: #946500; --ac-green: #3E7D2E; --ac-rust: #B04A1F; --ac-slate: #55687A; --asp-tint: 10%;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -32,7 +33,8 @@
       --rule: #2D3A47; --gas: #E5AA52; --on-gas: #1B1206; --error: #E0705E;
       --hl-yellow: rgba(230, 190, 40, .38); --hl-green: rgba(70, 190, 110, .36); --hl-blue: rgba(80, 150, 255, .4);
       --hl-pink: rgba(255, 90, 150, .36); --hl-violet: rgba(160, 110, 255, .42);
-      --asp: #62C7C1; --asp-bg: #17302F; --asp-line: #2B5754;
+      --ac-teal: #62C7C1; --ac-blue: #7FA8F0; --ac-violet: #B79AF2; --ac-pink: #EE8DB8;
+      --ac-amber: #E3B44F; --ac-green: #86C86F; --ac-rust: #EE9467; --ac-slate: #A3B3C2; --asp-tint: 16%;
       color-scheme: dark;
     }
   }
@@ -192,9 +194,12 @@
   /* The verse column: the text, then its aspects */
   .textfield { display: grid; gap: 10px; min-width: 0; }
   /* Aspects (scene, place, zoom…): a teal card with a rule on the left, unlike any other block */
+  .aspect { --asp: var(--ac-teal); }   /* each card sets its type's colour (aspectColor) */
   .aspect .fhead label { color: var(--asp); font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-  .aspect .hl { background: var(--asp-bg); box-shadow: inset 3px 0 0 var(--asp); }
-  .aspect textarea, .aspect textarea:focus { border-color: var(--asp-line); }
+  .aspect .hl { background: color-mix(in srgb, var(--asp) var(--asp-tint), var(--surface)); box-shadow: inset 3px 0 0 var(--asp); }
+  .aspect textarea, .aspect textarea:focus { border-color: color-mix(in srgb, var(--asp) 45%, transparent); }
+  #viewMenu .dot { width: 18px; height: 18px; padding: 0; margin-left: auto; border-radius: 50%; flex: none;
+    background: var(--asp); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--rule); }
   .aspect .backdrop, .aspect textarea { padding-left: 14px; }
   .aspect .backdrop { padding-left: calc(14px + var(--ti, 0px)); }
   #viewBtn.filtered { border-color: var(--gas); color: var(--gas); }
@@ -893,7 +898,43 @@ function levels() {
 const listAt = f => ((cache.names || {})[f.toLowerCase()] || {}).list || [];
 // Names for the open poem from every level that has a list, nearest first
 const namesHere = () => parseNames(levels().flatMap(listAt).join('\n'));
-const aspectTypes = () => listAt(ASPECTS_KEY);
+// _aspects.txt lines are «Type» or «Type: colour»; a type's colour shows on all its cards in every poem
+const ASPECT_COLORS = ['teal', 'blue', 'violet', 'pink', 'amber', 'green', 'rust', 'slate'];
+function aspectList() {
+  const out = [];
+  listAt(ASPECTS_KEY).forEach(line => {
+    const m = /^(.*?)\s*:\s*([a-z]+)$/i.exec(line), color = m && m[2].toLowerCase();
+    const name = color && ASPECT_COLORS.includes(color) && m[1] ? m[1] : line;
+    if (!out.some(x => x.name.toLowerCase() === name.toLowerCase())) out.push({ name, color: name === line ? null : color });
+  });
+  return out;
+}
+const aspectTypes = () => aspectList().map(x => x.name);
+// The chosen colour, else one picked from the name (the same on every device); no type: slate
+function aspectColor(type) {
+  if (!type) return 'slate';
+  const t = aspectList().find(x => x.name.toLowerCase() === type.toLowerCase());
+  if (t && t.color) return t.color;
+  let h = 0;
+  for (const ch of type.toLowerCase()) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return ASPECT_COLORS[h % (ASPECT_COLORS.length - 1)];   // slate is kept for aspects without a type
+}
+// Save a type's colour to _aspects.txt (adding the type if it isn't listed); everything repaints after
+async function setAspectColor(type, color) {
+  if (!navigator.onLine) { toast('You’re offline. Connect to the internet to change the colour: it’s saved in Dropbox.', true); return; }
+  const list = aspectList();
+  const t = list.find(x => x.name.toLowerCase() === type.toLowerCase());
+  if (t) t.color = color; else list.push({ name: type, color });
+  try {
+    await saveList(ASPECTS_KEY, list.map(x => x.name + (x.color ? ': ' + x.color : '')));
+    if (model) render();
+    if (!$('#viewMenu').hidden) renderViewMenu();
+  } catch (e) {
+    if (!e.conflict) { handleErr(e); return; }
+    await sync();
+    toast('The aspect types were changed on another device. They’re up to date now: choose the colour again.', true);
+  }
+}
 // The «+ Claude» name: the first name of the list closest to the root
 const quickName = () => levels().reverse().map(listAt).filter(l => l.length).map(l => l[0])[0] || null;
 
@@ -1094,6 +1135,7 @@ function renderViewMenu() {
     const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on;
     c.addEventListener('change', () => { change(c.checked); saveView(); viewBadge(); renderViewMenu(); if (model) render(); });
     l.append(c, text); m.append(l);
+    return l;
   };
   VIEW_KINDS.forEach(([k, label]) => {
     row(label, view[k], '', on => {
@@ -1101,11 +1143,23 @@ function renderViewMenu() {
       // aspects back on with every type unchecked (after «Hide all») would still show nothing
       if (k === 'asp' && on && viewTypes().every(t => view.off.includes(t.toLowerCase()))) view.off = [];
     });
-    if (k === 'asp') viewTypes().forEach(t => row(t || 'No type', !view.off.includes(t.toLowerCase()), 'sub' + (view.asp ? '' : ' off'), on => {
-      view.off = view.off.filter(x => x !== t.toLowerCase());
-      if (!on) view.off.push(t.toLowerCase());
-      else view.asp = true;
-    }));
+    if (k === 'asp') viewTypes().forEach(t => {
+      const l = row(t || 'No type', !view.off.includes(t.toLowerCase()), 'sub' + (view.asp ? '' : ' off'), on => {
+        view.off = view.off.filter(x => x !== t.toLowerCase());
+        if (!on) view.off.push(t.toLowerCase());
+        else view.asp = true;
+      });
+      if (!t) return;   // aspects without a type stay slate
+      const now = aspectColor(t);
+      const dot = button('', 'dot', e => {
+        e.preventDefault();   // inside the label: don't toggle the checkbox
+        setAspectColor(t, ASPECT_COLORS[(ASPECT_COLORS.indexOf(now) + 1) % ASPECT_COLORS.length]);
+      });
+      dot.style.setProperty('--asp', 'var(--ac-' + now + ')');
+      dot.title = 'Colour of ' + t + ': ' + now + ' (tap for the next one)';
+      dot.setAttribute('aria-label', dot.title);
+      l.append(dot);
+    });
   });
   const note = document.createElement('p'); note.className = 'vnote';
   note.textContent = 'Hidden blocks are only out of sight: they stay in the file and in copies for Claude.';
@@ -1141,11 +1195,16 @@ function typeSelect(x, label) {
   const g = group('Other');
   opt(g, 'other', 'Other type…');
   if (x.by) opt(g, 'none', 'No type');
+  if (x.by) {   // the colour belongs to the type: it changes every card of it, in every poem
+    const c = group('Colour of “' + x.by + '”'), now = aspectColor(x.by);
+    ASPECT_COLORS.forEach(k => opt(c, 'c:' + k, (k === now ? '✓ ' : '● ') + k[0].toUpperCase() + k.slice(1)));
+  }
   opt(group('List'), 'edit', 'Edit aspect types…');
   sel.addEventListener('change', () => {
     const v = sel.value;
     sel.value = '';
     if (v === 'edit') { editNames(ASPECTS_KEY); return; }
+    if (v.startsWith('c:')) { setAspectColor(x.by, v.slice(2)); return; }
     if (v.startsWith('t:')) x.by = v.slice(2);
     else if (v === 'none') delete x.by;
     else if (v === 'other') {
@@ -1349,6 +1408,7 @@ function stanzaEl(s, i) {
       s.asps.splice(j, 1); changed(); render();
     })], true);
     el.classList.add('aspect');
+    el.style.setProperty('--asp', 'var(--ac-' + aspectColor(x.by) + ')');
     col.append(el);
   });
   if (col.children.length) f.append(col); else f.classList.add('no-text');
@@ -2004,7 +2064,8 @@ function editNames(folder) {
   namesFolder = folder;
   if (folder === ASPECTS_KEY) {
     $('#namesTitle').textContent = 'Aspect types';
-    $('#namesHint').textContent = 'What you follow through a poem: place, time, zoom… Offered for every poem, one per line. Saved in Dropbox as ' + ASPECTS_FILE + '.';
+    $('#namesHint').textContent = 'What you follow through a poem: place, time, zoom… One per line, offered for every poem. ' +
+      'A colour can follow a colon, e.g. «Place: green» (' + ASPECT_COLORS.join(', ') + '). Saved in Dropbox as ' + ASPECTS_FILE + '.';
   } else {
     $('#namesTitle').textContent = 'Interpreters: ' + (folder ? folderLabel(folder) : 'all poets');
     $('#namesHint').textContent = (folder ? 'Offered for poems in ' + folderLabel(folder) + ' and its subfolders.'
@@ -2016,14 +2077,20 @@ function editNames(folder) {
   $('#namesText').focus();
 }
 $('#cancelNames').addEventListener('click', () => namesDlg.close());
+// Upload a list (an interpreter list or the aspect types) with its rev; throws e.conflict if it changed elsewhere
+async function saveList(key, list) {
+  const k = key.toLowerCase(), old = (cache.names || {})[k];
+  const r = await upload(old ? old.path : key === ASPECTS_KEY ? '/' + ASPECTS_FILE : key + '/' + NAMES_FILE,
+    list.join('\n') + (list.length ? '\n' : ''), old ? old.rev : null);
+  (cache.names = cache.names || {})[k] = { path: r.path_display, rev: r.rev, list };
+  saveCache();
+}
 $('#namesForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   if (!navigator.onLine) { toast('You’re offline. Connect to the internet and save the list again.', true); return; }
-  const k = namesFolder.toLowerCase(), old = (cache.names || {})[k], list = parseNames($('#namesText').value);
   try {
-    const r = await upload(old ? old.path : namesFolder === ASPECTS_KEY ? '/' + ASPECTS_FILE : namesFolder + '/' + NAMES_FILE, list.join('\n') + (list.length ? '\n' : ''), old ? old.rev : null);
-    (cache.names = cache.names || {})[k] = { path: r.path_display, rev: r.rev, list };
-    saveCache(); namesDlg.close();
+    await saveList(namesFolder, parseNames($('#namesText').value));
+    namesDlg.close();
     if (model) render();
     toast('List saved.');
   } catch (e) {

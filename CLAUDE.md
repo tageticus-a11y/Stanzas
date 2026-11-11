@@ -121,8 +121,17 @@ optional, any number, long (pasted from Claude), shown collapsed
   same dialog as interpreter lists (`editNames(ASPECTS_KEY)`). «+ Add → Aspect»
   offers each type and «Without a type»; each aspect has a «Type» menu
   (`typeSelect`). Shown under the verse in the verse column (`.textfield`) as a
-  teal card (`--asp*` colours). Copies for Claude include them as
+  card in its type's colour. Copies for Claude include them as
   «Aspect (Type):».
+- Aspect colours belong to the type, not the card: `_aspects.txt` lines are
+  `Type` or `Type: colour`, colour one of `ASPECT_COLORS` (teal, blue, violet,
+  pink, amber, green, rust, slate; `--ac-*` per theme, the card's tint and
+  border are `color-mix`ed from it). A suffix that isn't a colour stays part of
+  the name (`aspectList`). Without a chosen colour, `aspectColor` picks one from
+  a hash of the name (never slate); no type = slate. Chosen in the Type menu's
+  «Colour» group or by tapping a type's dot in the View menu (next colour);
+  `setAspectColor` saves the list at once (`saveList`, with the rev), adding
+  the type if it isn't listed. Poem files never store colours.
 - Other interpretations: any number of `### Other interpretation N` per
   stanza, in memory `stanza.oths = [{ o, by?, hidden, marks }]`. `by` is the
   interpreter's name (the «Name» menu), written after a colon in the heading
