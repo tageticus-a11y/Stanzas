@@ -151,7 +151,8 @@
   #palette .fmt-u { text-decoration: underline; }
   #palette .clear { font-size: .78rem; color: var(--muted); background: transparent; border-color: transparent; padding: 0 4px; }
 
-  #interp { display: grid; gap: 14px; }
+  /* minmax(0, 1fr): a collapsed one's one-line preview must not widen the column past the page */
+  #interp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
   #date, #final, #interp { padding: 20px 0 20px calc(1.6rem + 10px); border-bottom: 1px solid var(--rule); }
   #date:empty, #final:empty, #interp:empty { display: none; }
   /* Epigraph: italic (the backdrop must match the textarea for highlights to line up) */
