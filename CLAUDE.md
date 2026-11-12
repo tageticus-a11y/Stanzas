@@ -245,6 +245,9 @@ optional, any number, long (pasted from Claude), shown collapsed
   first stanza with an empty, shown «My understanding», just under the sticky
   header (`scrollToUnfinished`); when all are filled it stays at the top.
   `history.scrollRestoration` is manual so the browser doesn't override it.
+  The header's «Continue» does the same on demand and puts the cursor in that
+  «My understanding» (showing that kind first if the View menu hides it); when
+  all are filled it says so in a toast.
 - View menu (header «View»): checkboxes to show or hide whole kinds of blocks
   for every poem: Verse (text and heading), Aspects (and each type), My
   understanding, Other interpretations, Questions, Additional interpretations.

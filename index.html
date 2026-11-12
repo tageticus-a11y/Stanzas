@@ -283,6 +283,7 @@
     <button type="button" id="copyVerse">Copy verse</button>
     <button type="button" id="copyAll">Copy all for Claude</button>
     <button type="button" id="newPoem">New</button>
+    <button type="button" id="continueBtn" title="Go to the first stanza whose “My understanding” is empty">Continue</button>
     <button type="button" id="viewBtn" aria-haspopup="true" aria-expanded="false" title="Show or hide the verse and kinds of notes">View</button>
     <span id="sync" role="status" aria-live="polite"></span>
   </header>
@@ -1226,6 +1227,16 @@ function scrollToUnfinished() {
   const art = i > 0 && $('#list').children[i];
   window.scrollTo(0, art ? art.getBoundingClientRect().top + window.scrollY - $('header').offsetHeight : 0);
 }
+// «Continue» in the header: the same place, on demand, with the cursor in that «My understanding»
+$('#continueBtn').addEventListener('click', () => {
+  if (!model) return;
+  if (!view.und) { reveal('und'); render(); }
+  const i = model.stanzas.findIndex(s => s.und != null && !s.undHidden && !s.und.trim());
+  if (i < 0) { toast('Every “My understanding” is filled in.'); return; }
+  const art = $('#list').children[i], t = document.getElementById('f' + i + 'und');
+  window.scrollTo(0, art.getBoundingClientRect().top + window.scrollY - $('header').offsetHeight);
+  if (t) t.focus({ preventScroll: true });
+});
 function emptyEl(msg) {
   const p = document.createElement('p'); p.className = 'empty'; p.textContent = msg;
   return p;
