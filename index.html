@@ -213,6 +213,10 @@
   #viewMenu .vbulk { display: flex; gap: 8px; padding: 4px 0 6px; border-bottom: 1px solid var(--rule); margin-bottom: 4px; }
   #viewMenu .vbulk button { flex: 1; font-size: .9rem; padding: 4px 8px; }
   #viewMenu .vnote { color: var(--muted); font-size: .85rem; margin: 6px 0 2px; }
+  /* «Sent to Claude up to here» under the marked stanza */
+  .sentmark { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; color: var(--gas); font-size: .85rem; font-weight: 700; }
+  .sentmark .line { flex: 1; border-top: 2px dashed var(--gas); opacity: .6; }
+  .sentmark button { font-size: .8rem; font-weight: 400; padding: 2px 8px; color: var(--muted); background: transparent; }
   .empty { color: var(--muted); padding: 32px 0 0; }
   .foot { margin-top: 24px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
   .foot .muted { color: var(--muted); font-size: .85rem; flex-basis: 100%; }
@@ -282,6 +286,7 @@
     <select id="poem" aria-label="Poem"></select>
     <button type="button" id="copyVerse">Copy verse</button>
     <button type="button" id="copyAll">Copy all for Claude</button>
+    <button type="button" id="copyNew" title="Copy the stanzas after the “Sent to Claude” mark, up to the last one with “My understanding” filled in">Copy new for Claude</button>
     <button type="button" id="newPoem">New</button>
     <button type="button" id="continueBtn" title="Go to the first stanza whose “My understanding” is empty">Continue</button>
     <button type="button" id="viewBtn" aria-haspopup="true" aria-expanded="false" title="Show or hide the verse and kinds of notes">View</button>
@@ -502,6 +507,7 @@ function stanzaNo(m, i) {
 }
 // ### heading → field; null drops the section's lines
 const HEADINGS = [[/^(my understanding|мо[её])/, 'und'], [/^other/, 'o'], [/^question/, 'q'], [/^answer/, 'a'], [/^aspect/, 'p'],
+  [/^sent to claude/, 'sent'],
   [/^(summary|выжим)/, null]];
 const COLORS = ['yellow', 'green', 'blue', 'pink', 'violet'];
 
@@ -600,6 +606,7 @@ function serialize(m) {
       parts.push('### Question ' + (j + 1) + (q.hidden ? ' (hidden)' : ''), field(q, 'q'));
       if (q.a != null) parts.push('### Answer ' + (j + 1), field(q, 'a'));
     });
+    if (s.sent) parts.push('### Sent to Claude');   // the last stanza sent to Claude (one per poem)
   });
   SECTIONS.forEach(([k, label]) => { if (m[k] != null) parts.push('## ' + label, field(m, k)); });
   (m.interps || []).forEach((x, j) => parts.push('## ' + interpHeading(m, j), field(x, 't')));
@@ -639,7 +646,7 @@ function parseMd(md, fallbackTitle) {
       const match = HEADINGS.find(([re]) => re.test(h));
       if (!match) continue;
       const f = match[1];
-      if (f === null) buf = null;
+      if (f === null || f === 'sent') { buf = null; if (f) cur.sent = true; }   // «Sent to Claude» has no content
       else if (f === 'o') {
         // "Other interpretation 2: Name": the name keeps its letter case, so take it from the line itself
         const by = /^[^:]*:\s*(.*?)\s*$/.exec(line.slice(4).trim().replace(/\s*\(hidden\)$/i, ''));
@@ -677,6 +684,7 @@ function parseMd(md, fallbackTitle) {
       return x;
     });
     if (s.isTitle) out.isTitle = true;
+    if (s.sent) out.sent = true;
     if (s.epigraph) out.epigraph = true;
     out.qs = s.qs.map(q => {
       const o = newQuestion();
@@ -1459,6 +1467,7 @@ function stanzaEl(s, i) {
   const a = document.createElement('div'); a.className = 'actions';
   a.append(button(kind === 'title' ? 'Delete title' : epi ? 'Delete epigraph' : 'Delete stanza', 'quiet', () => {
     if (!confirm('Delete ' + name + ' with its notes?')) return;
+    keepSentMark(i);
     model.stanzas.splice(i, 1); changed(); render();
   }));
   if (epi || (!kind && i === first && !hasEpigraph)) a.append(button(epi ? 'Not an epigraph' : 'Mark as epigraph', '', () => {
@@ -1493,6 +1502,7 @@ function stanzaEl(s, i) {
   // A stanza that is really a heading («II», «----») becomes the heading of the next one
   const next = model.stanzas[i + 1];
   if (!kind && next && !kindOf(model, i + 1) && next.head == null) opt(cols, 'tohead', 'Make it the heading below');
+  if (!s.sent) opt(cols, 'sent', 'Mark as sent to Claude up to here');
   const st = document.createElement('optgroup'); st.label = 'New stanza';
   // ordinary stanzas can't go above a title or epigraph, or between them
   if (!kind) opt(st, 'above', 'Stanza above');
@@ -1521,10 +1531,12 @@ function stanzaEl(s, i) {
         const r = (s.marks['text' + k] || []).map(([a, b, c]) => [Math.max(a, from) - from, Math.min(b, to) - from, c]).filter(x => x[0] < x[1]);
         if (r.length) next.marks['head' + k] = r;
       }
+      keepSentMark(i);
       model.stanzas.splice(i, 1);
       expanded.clear();
       changed(); render(); focusField('f' + i + 'head');
     }
+    else if (v === 'sent') { setSentMark(i); changed(); render(); }
     else if (v === 'o') { s.oths.push(newOther()); reveal('oth'); changed(); render(); focusField('f' + i + 'o' + (s.oths.length - 1)); }
     else if (v === 'above' || v === 'below' || v === 'epigraph' || v === 'title') {
       const at = v === 'below' ? i + 1 : v === 'title' ? 0 : i;
@@ -1547,6 +1559,14 @@ function stanzaEl(s, i) {
   a.append(gap, button('Copy for Claude', '', e => copy('“' + model.title + '”, ' + name + '\n\n' + stanzaForClaude(i),
     e.currentTarget, name.replace(/^the /, ''))));
   f.append(a);
+  // The line under the last stanza sent to Claude
+  if (s.sent) {
+    const sm = document.createElement('div'); sm.className = 'sentmark';
+    const l = document.createElement('span'); l.textContent = '▲ Sent to Claude up to here';
+    const line = document.createElement('span'); line.className = 'line';
+    sm.append(l, line, button('Remove mark', '', () => { delete s.sent; changed(); render(); }));
+    f.append(sm);
+  }
   art.append(num, f);
   return art;
 }
@@ -1606,12 +1626,34 @@ function renderSelbar() {
   document.body.classList.toggle('selecting', idx.length > 0);
   $('#selCount').textContent = idx.length ? selName(idx) + ' selected' : '';
 }
-$('#selCopy').addEventListener('click', e => {
-  const idx = selectedIdx();
-  if (!idx.length) return;
+/* «Sent to Claude up to here»: one stanza per poem carries the mark (stanza.sent, «### Sent to Claude» in the
+   file, so it syncs and moves with its stanza). Copying several stanzas for Claude puts it on the last one. */
+function setSentMark(i) { model.stanzas.forEach((s, k) => { if (k === i) s.sent = true; else delete s.sent; }); }
+// When a marked stanza goes away, the mark goes to the one before it
+function keepSentMark(i) { if (model.stanzas[i].sent && i > 0) model.stanzas[i - 1].sent = true; }
+function copyStanzas(idx, btn) {
   copy('“' + model.title + '”, ' + selName(idx) + '\n\n' + idx.map(i =>
     '## ' + ({ title: 'Title', epigraph: 'Epigraph' }[kindOf(model, i)] || 'Stanza ' + stanzaNo(model, i)) + '\n\n' + stanzaForClaude(i)
-  ).join('\n\n'), e.currentTarget, selName(idx));
+  ).join('\n\n'), btn, selName(idx));
+  setSentMark(idx[idx.length - 1]);
+  changed(); render();
+}
+$('#selCopy').addEventListener('click', e => {
+  const idx = selectedIdx();
+  if (idx.length) copyStanzas(idx, e.currentTarget);
+});
+// «Copy new for Claude»: from the stanza after the mark (or the first) to the last with «My understanding» filled in
+$('#copyNew').addEventListener('click', e => {
+  if (!model) return;
+  const from = model.stanzas.findIndex(s => s.sent) + 1;
+  let to = -1;
+  model.stanzas.forEach((s, k) => { if ((s.und || '').trim()) to = k; });
+  if (to < from) {
+    toast(from ? 'Nothing new to copy: no “My understanding” is filled in after the “Sent to Claude” mark.'
+      : 'Nothing to copy yet: fill in “My understanding” for some stanzas first.', true);
+    return;
+  }
+  copyStanzas(Array.from({ length: to - from + 1 }, (_, k) => from + k), e.currentTarget);
 });
 $('#selClear').addEventListener('click', () => { selected.clear(); selAnchor = null; render(); });
 document.addEventListener('keydown', e => {
@@ -1981,7 +2023,8 @@ $('#logout').addEventListener('click', () => {
 $('#poem').addEventListener('change', e => open(e.target.value, true));
 $('#copyAll').addEventListener('click', e => {
   if (!model || !model.stanzas.length) { toast('Nothing to copy: no stanzas yet.', true); return; }
-  copy(serialize({ ...model, interps: [] }), e.currentTarget, 'the poem with notes');   // without the additional interpretation
+  // without the additional interpretations and the «Sent to Claude» mark
+  copy(serialize({ ...model, interps: [], stanzas: model.stanzas.map(s => ({ ...s, sent: false })) }), e.currentTarget, 'the poem with notes');
 });
 // Just the poem: title (from the title block if there is one), stanzas (the epigraph first) and date,
 // without notes or formatting

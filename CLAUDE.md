@@ -89,6 +89,10 @@ shown as Q<stanza>.1
 
 optional answer to question 1
 
+### Sent to Claude
+
+optional, empty: this stanza is the last one sent to Claude (one per poem)
+
 ## Date
 
 optional free text (authors write dates in many ways)
@@ -232,6 +236,16 @@ optional, any number, long (pasted from Claude), shown collapsed
     epigraph) selects it, Shift+click a range; `#selbar` at the bottom then
     offers «Copy for Claude» (each stanza as `## Stanza N` + `stanzaForClaude`)
     and Clear (also Esc). `selected` holds stanza objects, not indexes.
+  - «Sent to Claude» mark: `stanza.sent` on one stanza, written as an empty
+    `### Sent to Claude` section so it syncs and moves with its stanza. Copying a
+    selection puts it on the last selected stanza (`copyStanzas`); «+ Add →
+    Mark as sent to Claude up to here» moves it by hand; the dashed line under
+    the stanza has «Remove mark». Deleting the marked stanza (or turning it into
+    a heading) moves the mark to the one before (`keepSentMark`). «Copy all for
+    Claude» leaves the mark out.
+  - «Copy new for Claude» (header): the stanzas after the mark (or from the
+    first) up to the last one with «My understanding» filled in, in the
+    selection format; then moves the mark there.
   - Feedback: `copy(text, btn, what)` shows a toast naming what was copied and
     turns the button into «Copied ✓» for a moment.
 - Long Other interpretations, questions and answers are cut to `CLAMP` px with
